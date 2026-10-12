@@ -1,0 +1,3220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>尾上・二色出荷管理システム</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- SheetJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- Flatpickr のCSS / JS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <!-- 日本語化 -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+
+    <link rel="icon" type="image/png" href="./system/assets/favicon48.png">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+
+    <style>
+        @media print {
+            /* 印刷に関係ないナビゲーションなどを非表示 */
+            .no-print { display: none !important; }
+            
+            /* 全体レイアウトの初期化 */
+            body, html { height: auto !important; overflow: visible !important; }
+            .main-content { margin-left: 0 !important; padding: 0 !important; width: 100% !important; overflow: visible !important; }
+            
+            /* 1枚目（サマリー）の直後で必ず改ページ */
+            .print-page-1 { 
+                page-break-before: avoid; 
+                page-break-after: always; 
+                break-after: page;
+            }
+            
+            /* 2枚目以降（トラック詳細）：各トラックの直前で改ページ */
+            .print-page-truck { 
+                page-break-before: always; 
+                break-before: page;
+                page-break-inside: avoid;
+                border: none !important; 
+                box-shadow: none !important; 
+                padding: 0 !important;
+                margin-bottom: 0 !important;
+            }
+        }
+        .compact-import { padding: 0.5rem; background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 0.5rem; text-align: center; }
+
+        /* カレンダーのポップアップ全体を大きくスケールアップ */
+        .flatpickr-calendar {
+            transform: scale(1.5) !important;
+            transform-origin: top left !important;
+            font-size: 16px !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+        }
+
+        /* カスタムスクロールバー（日別タブ用） */
+        .tab-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+        .tab-scroll::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        .creator-mark{
+            border-radius: 5px;
+            opacity: 0.9;
+        }
+     
+        .creator-mark2 {
+            display: inline-block;
+            vertical-align: middle; /* テキストと縦位置を中央で揃える */
+            margin-right: 0.4rem;   /* 右側に少し余白を作る */
+            opacity:0.9;
+}
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- ==========================================
+         左側：メニューナビゲーション
+         ========================================== -->
+    <aside class="w-full md:w-64 bg-slate-900 text-slate-100 flex flex-col no-print shrink-0 shadow-xl h-auto md:h-full">
+        <div class="p-4 bg-slate-950 border-b border-slate-800">
+            <h1 class="text-md font-bold tracking-wider text-blue-400">尾上・二色在庫管理システム</h1>
+            <p class="text-xxs text-slate-300 mt-1">二色出荷管理</p>
+        </div>
+        <nav id="main-menu" class="flex-1 p-3 space-y-1 overflow-y-auto text-xm">
+            <p class="text-xxs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1">コアデータ・在庫</p>
+            <button id="menu-tab-production" onclick="switchTab('tab-production')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">① 生産実績登録</button>
+            <button id="menu-tab-qr" onclick="switchTab('tab-qr')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">② QR読込在庫一覧</button>
+            <button id="menu-tab-treatment" onclick="switchTab('tab-treatment')" class="w-full flex justify-between items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">
+                <span>⚠️ 処置待ち管理</span>
+                <span id="treatment-badge" class="bg-red-500 text-white text-xxs px-1.5 py-0.5 rounded-full hidden">0</span>
+            </button>
+            <button id="menu-tab-demand" onclick="switchTab('tab-demand')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">③ 二色要望一覧</button>
+            
+            <div class="pt-2 my-1 border-t border-slate-800"></div>
+            <p class="text-xxs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1">尾上在庫管理</p>
+            <button id="menu-tab-onoe-out" onclick="switchTab('tab-onoe-out')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">📦 尾上払い出し</button>
+            <button id="menu-tab-onoe-return" onclick="switchTab('tab-onoe-return')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">🔄 尾上払い戻し</button>
+
+            <div class="pt-2 my-1 border-t border-slate-800"></div>
+            <p class="text-xxs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1">二色特殊処理</p>
+            <button id="menu-tab-wash-plan" onclick="switchTab('tab-wash-plan')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">🧼 二色洗い予定一覧</button>
+            <button id="menu-tab-wash-done" onclick="switchTab('tab-wash-done')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">✨ 二色返却</button>
+
+            <div class="pt-2 my-1 border-t border-slate-800"></div>
+            <p class="text-xxs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1">メイン配車</p>
+            <button id="menu-tab-shipping" onclick="switchTab('tab-shipping')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800 font-bold text-amber-400">🚚 ④ 出荷管理・配車</button>
+            <button id="menu-tab-nisho-shipping" onclick="switchTab('tab-nisho-shipping')" class="px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-slate-700">二色出荷処理（在庫引落）</button>
+
+            <div class="pt-2 my-1 border-t border-slate-800"></div>
+            <p class="text-xxs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1">履歴</p>
+            <button id="menu-tab-history" onclick="switchTab('tab-history')" class="w-full flex items-center px-2.5 py-2 rounded-lg transition text-left text-slate-300 hover:bg-slate-800">📊 ⑤ 出荷履歴確認</button>
+            
+            <div class="pt-2 my-1 border-t border-slate-800"></div>
+            <p class="text-xxs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-1">システム管理</p>
+            <div class="px-2 py-1 space-y-1">
+                <button onclick="exportBackup()" class="w-full bg-slate-800 hover:bg-indigo-900 text-blue-300 font-bold py-1.5 px-2 rounded text-xxs transition text-left flex items-center justify-between">
+                    <span>📥 バックアップ保存</span>
+                </button>
+                <button onclick="triggerBackupImport()" class="w-full bg-slate-800 hover:bg-emerald-950 text-emerald-400 font-bold py-1.5 px-2 rounded text-xxs transition text-left flex items-center justify-between">
+                    <span>📤 バックアップ復元</span>
+                </button>
+                <!-- 非表示のファイル入力枠 -->
+                <input type="file" id="backup-file-input" accept=".json" onchange="importBackup(event)" class="hidden">
+
+                <div class="px-3 py-2 text-xs font-semibold text-slate-400 tracking-wider">システムリセット</div>
+                <button onclick="clearAllSystemData()" class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-red-400 hover:bg-red-950/50 hover:text-red-300 transition-colors border border-red-900/50 mt-1">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    全データクリア
+                </button>
+
+
+                
+                <button onclick="OneDriveFileManager.setupFolder()" class="bg-blue-900 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded text-xs shadow">
+                    📁 OneDriveフォルダの連携・同期設定
+                </button>
+            </div>
+            <p class="text-xxs text-slate-600 mt-2">Developed by wada</p>
+            <p class="text-xxs text-slate-600 mt-1">@2026 v-1.0.1</p>
+            <img src="./system/assets/main_bk03_icon.png" alt="Creator-Mark" class="creator-mark">
+        </nav>
+    </aside>
+
+    <!-- 右側：メインコンテンツ -->
+    <div class="w-full flex-1 p-4 md:p-6 main-content h-full overflow-y-auto space-y-6">
+
+        <!-- ① 生産実績タブ -->
+        <section id="tab-production" class="tab-content">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">① 生産実績登録</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+                    <div class="compact-import flex flex-col justify-center items-center p-3">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Excelインポート(.xlsx)</label>
+                        <input type="file" id="prod-file-input" accept=".xlsx, .xls" class="block w-full text-xxs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        <button onclick="handleExcelImport('production')" class="mt-2 bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs hover:bg-blue-700 shadow-sm">実行</button>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl border border-gray-200 lg:col-span-2">
+                        <h3 class="text-xs font-bold text-slate-700 mb-2">手入力追加</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xxs">
+                            <input type="text" id="p-date" class="border p-1.5 rounded bg-white" placeholder="作業日 (例:20260701)">
+                            <input type="text" id="p-mach" class="border p-1.5 rounded bg-white" placeholder="機械番号">
+                            <input type="text" id="p-type" class="border p-1.5 rounded bg-white" placeholder="鋼種">
+                            <input type="number" step="0.01" id="p-dia" class="border p-1.5 rounded bg-white" placeholder="線径 (例:5.50)">
+                            <input type="text" id="p-lot" class="border p-1.5 rounded bg-white" placeholder="ロットNo">
+                            <input type="number" id="p-sub" class="border p-1.5 rounded bg-white" placeholder="子番">
+                            <input type="number" id="p-weight" class="border p-1.5 rounded bg-white" placeholder="重量(kg)">
+                            <input type="text" id="p-state" class="border p-1.5 rounded bg-white" placeholder="備考">
+                        </div>
+                        <button onclick="addProductionManual()" class="mt-2 w-full bg-emerald-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-emerald-700">データ追加</button>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 text-white p-3 rounded-xl mb-3">
+                    <h3 class="text-xs font-bold text-blue-300 mb-1">【現在の一覧の鋼種・線径別 毎の本数・重量サマリー】</h3>
+                    <div id="production-matrix-summary" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xxs max-h-24 overflow-y-auto"></div>
+                </div>
+
+                <div class="bg-blue-50/50 border border-blue-100 p-3 rounded-xl mb-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                    <input type="text" id="p-search-type" oninput="renderProduction()" placeholder="🔍 鋼種で検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <input type="text" id="p-search-dia" oninput="renderProduction()" placeholder="🔍 線径で検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <input type="text" id="p-search-lot" oninput="renderProduction()" placeholder="🔍 ロットNoで検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <input type="text" id="p-search-sub" oninput="renderProduction()" placeholder="🔍 子番で検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <div class="text-right font-bold text-xs text-blue-900 flex items-center justify-end" id="p-summary">0本 (0kg)</div>
+                </div>
+
+                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="w-full text-left border-collapse text-xxs">
+                        <thead>
+                            <tr class="bg-gray-100 border-b border-gray-200 text-slate-600 font-bold">
+                                <th class="p-2">作業日</th><th class="p-2">機械</th><th class="p-2">鋼種</th><th class="p-2">線径</th><th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">重量(kg)</th><th class="p-2">備考状態</th><th class="p-2">尾上払出</th><th class="p-2">尾上払戻</th><th class="p-2">洗い予定</th><th class="p-2">洗い済み</th><th class="p-2 text-center no-print">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="production-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ② QR読込在庫タブ -->
+        <section id="tab-qr" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">② QR読み取りデータインポート</h2>
+                <div class="compact-import flex flex-col justify-center items-center p-3 mb-4 max-w-sm mx-auto">
+                    <label class="block text-xs font-bold text-slate-700 mb-1">QRデータExcelインポート</label>
+                    <input type="file" id="qr-file-input" accept=".xlsx, .xls" class="block w-full text-xxs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    <button onclick="handleExcelImport('qr')" class="mt-2 bg-blue-600 text-white px-4 py-1 rounded font-bold text-xs hover:bg-blue-700 shadow-sm">実行</button>
+                </div>
+
+                <div class="bg-slate-800 text-white p-3 rounded-xl mb-3">
+                    <h3 class="text-xs font-bold text-emerald-300 mb-1">【現在のQR在庫の鋼種・線径別 毎の本数・重量サマリー】</h3>
+                    <div id="qr-matrix-summary" class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xxs max-h-24 overflow-y-auto"></div>
+                </div>
+
+                <div class="bg-blue-50/50 border border-blue-100 p-3 rounded-xl mb-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+                    <input type="text" id="q-search-type" oninput="renderQR()" placeholder="🔍 鋼種で検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <input type="text" id="q-search-dia" oninput="renderQR()" placeholder="🔍 線径で検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <input type="text" id="q-search-lot" oninput="renderQR()" placeholder="🔍 ロットNoで検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <input type="text" id="q-search-sub" oninput="renderQR()" placeholder="🔍 子番で検索" class="border p-1.5 rounded bg-white shadow-sm">
+                    <div class="text-right font-bold text-xs text-blue-900 flex items-center justify-end" id="q-summary">0本 (0kg)</div>
+                </div>
+
+                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="w-full text-left border-collapse text-xxs">
+                        <thead>
+                            <tr class="bg-gray-100 border-b border-gray-200 text-slate-600 font-bold">
+                                <th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">作業日(紐付)</th><th class="p-2">鋼種(紐付)</th><th class="p-2">線径(紐付)</th><th class="p-2">重量(紐付)</th><th class="p-2 text-center no-print">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qr-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ⚠️ 処置待ち管理タブ -->
+        <section id="tab-treatment" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">⚠️ 処置待ち資材管理</h2>
+                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="w-full text-left border-collapse text-xxs">
+                        <thead>
+                            <tr class="bg-red-50 border-b text-red-900 font-bold">
+                                <th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">作業日(紐付)</th><th class="p-2">鋼種(紐付)</th><th class="p-2">線径(紐付)</th><th class="p-2">重量(kg)</th><th class="p-2">元の備考欄</th><th class="p-2 text-center">処置判定</th>
+                            </tr>
+                        </thead>
+                        <tbody id="treatment-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ③ 二色要望一覧タブ -->
+<section id="tab-demand" class="tab-content hidden">
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <!-- ヘッダーとボタン群 -->
+        <div class="flex flex-wrap items-center justify-between border-b pb-2 mb-3 gap-2">
+            <h2 class="text-lg font-bold text-slate-800">③ 二色要望一覧</h2>
+            <div class="flex flex-wrap gap-1.5 text-xxs font-bold">
+                <!-- ソートボタン -->
+                <button onclick="sortDemand('date')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded border border-slate-300">納期順</button>
+                <button onclick="sortDemand('no')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded border border-slate-300">要望番号順</button>
+                <button onclick="sortDemand('type')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded border border-slate-300">鋼種順</button>
+                
+                <!-- 残数0表示切替ボタン -->
+                <button id="toggle-zero-btn" onclick="toggleZeroDemand()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded border border-slate-300">残数0を非表示</button>
+                
+                <!-- 別ウィンドウ表示ボタン -->
+                <button onclick="openDemandWindow()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded shadow-sm">別ウィンドウで表示</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <div class="compact-import flex flex-col justify-center items-center p-3 max-w-sm mx-auto">
+                <label class="block text-xs font-bold text-slate-700 mb-1">二色要望Excelインポート</label>
+                <input type="file" id="demand-file-input" accept=".xlsx, .xls" class="block w-full text-xxs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                <button onclick="handleExcelImport('demand')" class="mt-2 bg-blue-600 text-white px-4 py-1 rounded font-bold text-xs hover:bg-blue-700 shadow-sm">実行</button>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl border border-gray-200 lg:col-span-2">
+                <h3 class="text-xs font-bold text-slate-700 mb-1">要望を手入力で追加</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xxs">
+                    <input type="text" id="d-date" class="border p-1.5 rounded bg-white" placeholder="要望納期 (例:20260701)">
+                    <input type="text" id="d-no" class="border p-1.5 rounded bg-white" placeholder="要望番号">
+                    <input type="text" id="d-type" class="border p-1.5 rounded bg-white" placeholder="鋼種処理">
+                    <input type="number" step="0.01" id="d-dia" class="border p-1.5 rounded bg-white" placeholder="線径">
+                    <input type="number" id="d-qty" class="border p-1.5 rounded bg-white" placeholder="要望丸数(本数)">
+                    <input type="number" id="d-weight" class="border p-1.5 rounded bg-white" placeholder="重量(kg)">
+                </div>
+                <button onclick="addDemandManual()" class="mt-2 w-full bg-emerald-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-emerald-700">要望データ追加</button>
+            </div>
+        </div>
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+            <!-- テーブルの上に配置 -->
+            <div id="demand-summary"></div>
+            <table class="w-full text-left border-collapse text-xxs">
+                <thead>
+                    <tr class="bg-gray-100 border-b text-slate-600 font-bold">
+                        <th class="p-2">要望納期</th><th class="p-2">要望番号</th><th class="p-2">鋼種処理</th><th class="p-2">線径</th><th class="p-2 text-center bg-slate-200">要望丸数(初期)</th><th class="p-2">初期重量(kg)</th><th class="p-2 bg-yellow-100 text-yellow-950 text-center font-bold">現在の残数</th><th class="p-2 text-center no-print">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="demand-table-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+
+
+        <!-- 📦 尾上払い出しタブ -->
+        <section id="tab-onoe-out" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">📦 尾上払い出し管理</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border p-3 rounded-lg bg-slate-50">
+                        <h3 class="text-xs font-bold text-slate-700 mb-2">Excelインポート一括処理</h3>
+                        <div class="flex flex-col items-center compact-import">
+                            <input type="date" id="onoe-out-date-picker" class="border p-1 text-xs rounded mb-2 bg-white">
+                            <input type="file" id="onoe-out-file" accept=".xlsx, .xls" class="text-xxs block w-full">
+                            <button onclick="importOnoe('out')" class="mt-2 bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">インポート＆自動紐付</button>
+                        </div>
+                    </div>
+                    <div class="border p-3 rounded-lg bg-slate-50 text-xxs space-y-2">
+                        <h3 class="text-xs font-bold text-slate-700">手動払い出し処理</h3>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div class="col-span-2">
+                                <label class="block text-l text-gray-500 mb-0.5">払出日</label>
+                                <input type="date" id="onoe-out-manual-date" class="w-full border p-1.5 bg-white rounded text-l">
+                            </div>
+                            <div>
+                                <label class="block text-xxs text-gray-500 mb-0.5">ロットNo</label>
+                                <input type="text" id="onoe-out-manual-lot" placeholder="ロットNo" class="w-full border p-1.5 bg-white rounded">
+                            </div>
+                            <div>
+                                <label class="block text-xxs text-gray-500 mb-0.5">子番</label>
+                                <input type="number" id="onoe-out-manual-sub" placeholder="子番" class="w-full border p-1.5 bg-white rounded">
+                            </div>
+                        </div>
+                        <button onclick="processOnoeManual('out')" class="w-full bg-emerald-600 text-white p-1.5 rounded text-xs font-bold">手動払出ボタン</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-xxs">
+                        <thead class="bg-slate-200 sticky top-0">
+                            <tr><th class="p-2">処理日</th><th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">紐付状態</th></tr>
+                        </thead>
+                        <tbody id="onoe-out-table-body" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 🔄 尾上払い戻しタブ -->
+        <section id="tab-onoe-return" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">🔄 尾上払い戻し管理</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border p-3 rounded-lg bg-slate-50">
+                        <h3 class="text-xs font-bold text-slate-700 mb-2">Excelインポート一括処理</h3>
+                        <div class="flex flex-col items-center compact-import">
+                            <input type="date" id="onoe-return-date-picker" class="border p-1 text-xs rounded mb-2 bg-white">
+                            <input type="file" id="onoe-return-file" accept=".xlsx, .xls" class="text-xxs block w-full">
+                            <button onclick="importOnoe('return')" class="mt-2 bg-indigo-600 text-white px-3 py-1 rounded text-xs font-bold">インポート＆自動紐付</button>
+                        </div>
+                    </div>
+                    <div class="border p-3 rounded-lg bg-slate-50 text-xxs space-y-2">
+                        <h3 class="text-xs font-bold text-slate-700">手動払い戻し処理 (重量変更対応)</h3>
+                        <div class="grid grid-cols-3 gap-1 mb-2">
+                            <div class="col-span-3">
+                                <label class="block text-l text-gray-500 mb-0.5">払戻日</label>
+                                <input type="date" id="onoe-return-manual-date" class="w-full border p-1 bg-white rounded text-l">
+                            </div>
+                            <div>
+                                <label class="block text-xxs text-gray-500 mb-0.5">ロットNo</label>
+                                <input type="text" id="onoe-return-manual-lot" placeholder="ロットNo" class="w-full border p-1 bg-white rounded">
+                            </div>
+                            <div>
+                                <label class="block text-xxs text-gray-500 mb-0.5">子番</label>
+                                <input type="number" id="onoe-return-manual-sub" placeholder="子番" class="w-28 border p-1 bg-white rounded">
+                            </div>
+                            <div>
+                                <label class="block text-m text-gray-500 mb-0.5">新重量(kg)</label>
+                                <input type="number" id="onoe-return-manual-w" placeholder="払い戻し重量(kg)" class="border p-1 rounded font-mono text-m w-28">
+                            </div>
+                            <div>
+                                <input type="text" id="onoe-return-manual-note" placeholder="備考（生産実績の備考へ反映）" class="border p-1 rounded text-m w-48">
+                            </div>
+                        </div>
+                        <button onclick="processOnoeManual('return')" class="bg-blue-600 text-white px-3 py-1 rounded text-l font-bold">登録</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
+                     <table class="w-full text-left border-collapse text-xs border">
+                       <thead>
+                           <tr class="bg-slate-100 border-b">
+                           <th class="p-2">払戻日</th>
+                           <th class="p-2">ロットNo</th>
+                           <th class="p-2">子番</th>
+                           <th class="p-2 text-right">払戻重量</th>
+                           <th class="p-2">備考</th>
+                           <th class="p-2">ステータス</th>
+                           </tr>
+                       </thead>
+                     <tbody id="onoe-return-table-body" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 🧼 二色洗い予定一覧タブ -->
+        <section id="tab-wash-plan" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">🧼 二色洗い予定一覧</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border p-3 rounded-lg bg-slate-50 flex flex-col items-center compact-import">
+                        <input type="date" id="wash-plan-date-picker" class="border p-1 text-xs rounded mb-1 bg-white">
+                        <input type="file" id="wash-plan-file" accept=".xlsx, .xls" class="text-xxs block w-full">
+                        <button onclick="importWash('plan')" class="mt-2 bg-blue-600 text-white px-3 py-1 rounded text-xs">一括洗い予定インポート</button>
+                    </div>
+                    <div class="border p-3 rounded-lg bg-slate-50 text-xxs space-y-2">
+                        <h3 class="text-xs font-bold text-slate-700">手動洗い予定処理</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="text" id="wash-plan-manual-lot" placeholder="ロットNo" class="border p-1.5 bg-white rounded">
+                            <input type="number" id="wash-plan-manual-sub" placeholder="子番" class="border p-1.5 bg-white rounded">
+                        </div>
+                        <button onclick="processWashManual('plan')" class="w-full bg-emerald-600 text-white p-1.5 rounded text-lg font-bold">二色洗い予定ボタン</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-xxs">
+                        <thead class="bg-slate-200 sticky top-0">
+                            <tr><th class="p-2">予定日</th><th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">鋼種</th><th class="p-2">線径</th><th class="p-2">重量</th></tr>
+                        </thead>
+                        <tbody id="wash-plan-table-body" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ✨ 二色返却タブ -->
+        <section id="tab-wash-done" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">✨ 二色返却処理（洗い済み確定）</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="border p-3 rounded-lg bg-slate-50 flex flex-col items-center compact-import">
+                        <input type="date" id="wash-done-date-picker" class="border p-1 text-xs rounded mb-1 bg-white">
+                        <input type="file" id="wash-done-file" accept=".xlsx, .xls" class="text-xxs block w-full">
+                        <button onclick="importWash('done')" class="mt-2 bg-blue-600 text-white px-3 py-1 rounded text-xs">一括二色返却インポート</button>
+                    </div>
+                    <div class="border p-3 rounded-lg bg-slate-50 text-xxs space-y-2">
+                        <h3 class="text-xs font-bold text-slate-700">手動二色返却（洗い済み）処理</h3>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="text" id="wash-done-manual-lot" placeholder="ロットNo" class="border p-1.5 bg-white rounded">
+                            <input type="number" id="wash-done-manual-sub" placeholder="子番" class="border p-1.5 bg-white rounded">
+                        </div>
+                        <button onclick="processWashManual('done')" class="w-full bg-emerald-600 text-white p-1.5 rounded text-lg font-bold">二色返却処理実行</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto border rounded-lg max-h-60 overflow-y-auto">
+                    <table class="w-full text-left border-collapse text-xxs">
+                        <thead class="bg-slate-200 sticky top-0">
+                            <tr><th class="p-2">返却日</th><th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">状況</th></tr>
+                        </thead>
+                        <tbody id="wash-done-table-body" class="divide-y"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+
+
+
+
+        
+
+
+
+        <!-- ④ 出荷管理タブ -->
+<section id="tab-shipping" class="tab-content hidden">
+    <!-- 年月選択＆日別タブ切り替えエリア -->
+    <div class="bg-slate-900 text-white p-4 rounded-xl shadow-md mb-4 no-print border border-slate-700">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3 pb-3 border-b border-slate-700">
+            <div class="flex items-center gap-3">
+                <span class="text-lg font-bold text-amber-400 flex items-center gap-1">📅 出荷対象年月:</span>
+                <select id="shipping-year-select" onchange="onShippingYearMonthChange()" class="bg-slate-800 text-white font-bold border border-slate-600 rounded px-3 py-1.5 text-base focus:ring-2 focus:ring-amber-400 outline-none">
+                    <option value="2025">2025年</option>
+                    <option value="2026" selected>2026年</option>
+                    <option value="2027">2027年</option>
+                    <option value="2028">2028年</option>
+                </select>
+                <select id="shipping-month-select" onchange="onShippingYearMonthChange()" class="bg-slate-800 text-white font-bold border border-slate-600 rounded px-3 py-1.5 text-base focus:ring-2 focus:ring-amber-400 outline-none">
+                    <option value="01">1月</option>
+                    <option value="02">2月</option>
+                    <option value="03">3月</option>
+                    <option value="04">4月</option>
+                    <option value="05">5月</option>
+                    <option value="06">6月</option>
+                    <option value="07">7月</option>
+                    <option value="08">8月</option>
+                    <option value="09">9月</option>
+                    <option value="10">10月</option>
+                    <option value="11">11月</option>
+                    <option value="12">12月</option>
+                </select>
+            </div>
+            <div class="text-xs text-slate-400 font-mono">
+                ※タブをクリックすると該当日の配車計画シートを個別に作成・閲覧できます
+            </div>
+        </div>
+        <div class="flex items-center gap-1 overflow-x-auto pb-1 tab-scroll" id="shipping-day-tabs"></div>
+    </div>
+
+    <!-- 画面全体の2カラムレイアウト（左：配車操作 / 右：引当可能QR在庫） -->
+    <div class="flex flex-col xl:flex-row gap-4 items-start">
+        
+        <!-- 左側メインコンテンツ（配車操作・印刷領域） -->
+        <div class="flex-1 w-full space-y-4">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 no-print">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">④ 出荷計画・トラック配車システム</h2>
+
+                <div class="flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-100 p-3 rounded-xl mb-4 text-lg">
+                    <div>
+                        <label class="font-bold text-slate-800">📅 出荷計画稼働日: </label>
+                        <input type="text" id="shipping-plan-date" class="border rounded px-3 py-2 text-lg font-bold bg-gray-100 text-slate-800 cursor-not-allowed" placeholder="日付を選択..." readonly>
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-800">🚚 トラック台数 (最大5台): </label>
+                        <input type="number" id="truck-count" min="1" max="5" value="3" class="border p-1 w-12 text-center rounded-lg bg-white font-bold ml-1" onchange="updateShippingUIControls(); renderShippingPatterns();">
+                    </div>
+                    <div class="ml-auto flex gap-2">
+                        <button onclick="autoAllocate()" class="bg-indigo-600 text-white px-3 py-1.5 rounded font-bold hover:bg-indigo-700 shadow transition-colors text-xxl">🚀 自動割り当て</button>
+                        <button onclick="clearAllocation()" class="bg-gray-400 text-white px-3 py-1.5 rounded hover:bg-gray-500 text-lg transition-colors">クリア</button>
+                        <!-- 全日程・全月一括クリア用のボタン -->
+                        
+                    </div>
+                </div>
+
+
+
+
+
+                <div class="border-gray-200 p-3 rounded-xl bg-gray-50 text-lg mb-4">
+                    <h3 class="font-bold mb-2 text-blue-900 text-lg">【手動個別配車】</h3>
+
+                    <div class="flex items-center gap-2">
+                    <!-- 引当可能QR在庫一覧を別ウィンドウで表示 -->
+                    <button onclick="openAvailableQRWindow()" class="bg-yellow-600 hover:bg-yellow-500 text-white font-bold px-3 py-1.5 rounded text-xm shadow flex items-center gap-1">
+                    <span>🔍</span> 引当可能QR在庫一覧を別ウィンドウで表示
+                    </button>
+                    <!-- 二色要望別ウィンドウ表示ボタン -->
+                    <button onclick="openDemandWindow()" class="bg-indigo-700 hover:bg-indigo-500 text-white px-3 py-1 rounded shadow-sm text-xm">二色要望一覧別ウィンドウで表示     
+                    </button>
+                    <!-- QR在庫・表示・非表示 -->
+                    <button type="button" onclick="toggleQrStockPanel()" class="bg-indigo-200 hover:bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold px-3 py-1 rounded-lg text-xm transition-colors flex items-center gap-1">
+                    <span id="toggle-qr-icon"></span> <span id="toggle-qr-btn-text">QR在庫を非表示</span>
+                    </button>
+                    </div>
+                </div>
+
+
+                <!-- 手動個別配車フォーム -->
+                <div class="border-gray-200 p-3 rounded-xl bg-gray-50 text-lg mb-4">
+                    <h3 class="font-bold mb-2 text-blue-900 text-lg">【手動個別配車】</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+                        <div>
+                            <label class="block mb-2 text-gray-600">要望番号の選択</label>
+                            <select id="select-demand" class="w-full border p-3 rounded bg-white h-12" onchange="updateManualSelectableQRCount()"></select>
+                        </div>
+                        <div>
+                            <label class="block mb-2 text-gray-600">基点となる原料（ロット・子番）</label>
+                            <select id="select-qr-item" class="w-full border p-3 rounded bg-white h-12 font-mono font-bold"></select>
+                        </div>
+                        <div>
+                            <label class="block mb-2 text-gray-600">積載本数</label>
+                            <input type="number" id="manual-qty" value="1" min="1" class="w-full border p-3 rounded bg-white h-12 font-bold text-center">
+                        </div>
+                        <div>
+                            <label class="block mb-2 text-gray-600">配車先トラック</label>
+                            <select id="select-truck" class="w-full border p-3 rounded bg-white h-12"></select>
+                        </div>
+                        <div>
+                            <button onclick="addManualAllocationWithQty()" class="w-full bg-emerald-600 text-white p-3 rounded font-bold hover:bg-emerald-700 shadow-sm text-lg h-12 flex items-center justify-center whitespace-nowrap">
+                                指定本数を配車リストへ追加
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-lg text-gray-400 mt-1" id="manual-available-hint"></p>
+                </div>
+
+                <div class="border border-purple-200 p-2 rounded-lg bg-purple-50 text-xxs mb-4">
+                    <span class="font-bold text-purple-900">洗い予定設定済み原料（配車優先対象）：</span>
+                    <div id="shipping-wash-hint" class="flex flex-wrap gap-2 mt-1 text-gray-700"></div>
+                </div>
+
+                <!-- 🚚 トラック１車目専用 合積み手入力枠 -->
+                <div class="border-2 border-amber-300 p-3 rounded-xl bg-amber-50/50 text-xxs mb-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-bold text-amber-950 text-m flex items-center gap-1">トラック１車目 専用 合積み手入力枠 (固定3行出力)</h3>
+                        <div class="flex gap-2">
+                            <button onclick="triggerAinoriImport()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2 py-1 rounded transition-colors text-xxs shadow-sm">📂 全日程合積みExcel読み込み</button>
+                            <input type="file" id="ainori-file-input" accept=".xlsx, .xls" onchange="importAinoriExcel(event)" class="hidden">
+                            <button onclick="exportMonthlyAinoriExcel()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded transition-colors text-xxs shadow-sm">📊 1〜31日 合積み一括Excel出力</button>
+                            
+                            <button onclick="clearAinoriInputs()" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded font-bold transition-colors text-xxs">🧹 合積みをクリア</button>
+                            <button onclick="clearAllAinoriDataAcrossAllDates()" class="bg-red-600 hover:bg-red-700 text-white border border-red-700 px-2 py-0.5 rounded font-bold transition-colors text-xxs">🗑️ 全日程の合積みを一括クリア</button>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-1">
+                        <div class="grid grid-cols-13 gap-1 font-bold text-gray-600">
+                            <div>製品名</div><div></div><div></div><div>詳細</div><div></div><div></div><div></div><div>本数</div><div>重量(kg)</div><div></div><div>積み込み場所</div><div></div><div>トラック番号</div>
+                        </div>
+                        <div class="grid grid-cols-13 gap-1">
+                            <input type="text" id="ainori-name-1" placeholder="合積製品A" class="col-span-3 border p1 bg-white rounded" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" id="ainori-detail-1" placeholder="詳細 (仕様・規格など)" class="col-span-4 border p1 bg-white rounded" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="number" id="ainori-qty-1" placeholder="本数" class="col-span-1 border p-1 bg-white rounded text-center" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="number" id="ainori-w-1" placeholder="重量" class="col-span-2 border p-1 bg-white rounded text-right" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" id="ainori-loc-1" placeholder="例: 新倉庫" class="col-span-2 border p-1 bg-white rounded text-center" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" value="１車目" class="col-span-1 border p-1 bg-gray-100 rounded text-center font-bold text-gray-500" readonly>
+                        </div>
+                        <div class="grid grid-cols-13 gap-1">
+                            <input type="text" id="ainori-name-2" placeholder="合積製品A" class="col-span-3 border p1 bg-white rounded" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" id="ainori-detail-2" placeholder="詳細 (仕様・規格など)" class="col-span-4 border p1 bg-white rounded" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="number" id="ainori-qty-2" placeholder="本数" class="col-span-1 border p-1 bg-white rounded text-center" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="number" id="ainori-w-2" placeholder="重量" class="col-span-2 border p-1 bg-white rounded text-right" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" id="ainori-loc-2" placeholder="例: 新倉庫" class="col-span-2 border p-1 bg-white rounded text-center" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" value="１車目" class="col-span-1 border p-1 bg-gray-100 rounded text-center font-bold text-gray-500" readonly>
+                        </div>
+                        <div class="grid grid-cols-13 gap-1">
+                            <input type="text" id="ainori-name-3" placeholder="合積製品A" class="col-span-3 border p1 bg-white rounded" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" id="ainori-detail-3" placeholder="詳細 (仕様・規格など)" class="col-span-4 border p1 bg-white rounded" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="number" id="ainori-qty-3" placeholder="本数" class="col-span-1 border p-1 bg-white rounded text-center" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="number" id="ainori-w-3" placeholder="重量" class="col-span-2 border p-1 bg-white rounded text-right" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" id="ainori-loc-3" placeholder="例: 新倉庫" class="col-span-2 border p-1 bg-white rounded text-center" oninput="saveAinoriCurrentInputs(); renderShippingPatterns();">
+                            <input type="text" value="１車目" class="col-span-1 border p-1 bg-gray-100 rounded text-center font-bold text-gray-500" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center bg-slate-100 p-3 rounded-xl border">
+                    <span class="text-xxs text-gray-500">※PDF出力時、出荷明細一覧は1枚目、詳細リストは2枚目から各トラック毎に改ページされます。</span>
+                    <div class="flex gap-2">
+                        <button onclick="window.print()" class="bg-slate-700 text-white px-4 py-2 rounded text-xxl font-bold hover:bg-slate-800 shadow">🖨️ PDF保存 / 印刷</button>
+                        <button onclick="executeShipping()" class="bg-red-600 text-white px-4 py-2 rounded text-xxl font-bold hover:bg-red-700 shadow">🚨 出荷確定（在庫引落）</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 印刷領域 パターン１ -->
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 print-page-1">
+                <div class="flex justify-between items-center border-b pb-2 mb-3">
+                    <h2 class="text-md font-bold text-slate-900" id="p1-title-date">【出荷一覧表】</h2>
+                    <span class="text-xxs border px-1.5 py-0.5 rounded bg-gray-50 text-gray-400">Page 1</span>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+                    <div class="lg:col-span-2 overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xxs">
+                            <thead>
+                                <tr class="bg-slate-100 border-b text-slate-600 font-bold">
+                                    <th class="p-2">要望納期</th><th class="p-2">要望番号</th><th class="p-2">鋼種</th><th class="p-2">線径</th><th class="p-2 text-center">出荷本数</th><th class="p-2">合計重量</th><th class="p-2">指定トラック</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pattern1-table-body" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+                    <div class="bg-slate-50 p-2 rounded-xl border border-gray-200">
+                        <h3 class="font-bold text-xxs mb-2 text-slate-700 uppercase tracking-wider">🚚 トラック別積載率</h3>
+                        <div id="pattern1-truck-summary" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xl font-bold text-amber-900 mb-2">【トラック１車目 合積み明細欄】</h3>
+                    <table class="w-full text-left border-collapse text-[14px] leading-tight bg-amber-50/20 border border-amber-200 rounded table-fixed">
+                        <thead>
+                            <tr class="bg-slate-800 text-white font-bold text-[12px]">
+                                <th class="p-1.5 text-left w-3/14">製品名</th>
+                                <th class="p-1.5 text-left w-5/14 break-words">詳細</th>
+                                <th class="p-1.5 text-center w-auto whitespace-nowrap">本数</th>
+                                <th class="p-1.5 text-right w-auto whitespace-nowrap">重量(kg)</th>
+                                <th class="p-1.5 text-center w-2/14 whitespace-nowrap">積み込み場所</th>
+                                <th class="p-1.5 text-center w-auto whitespace-nowrap">積載先</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pattern1-ainori-print-body" class="divide-y divide-amber-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 印刷領域 パターン２ -->
+            <div id="pattern2-print-zone" class="space-y-6"></div>
+        </div>
+
+        <!-- 右側：引当可能QR在庫一覧サイドパネル (印刷時非表示) -->
+      
+
+        <aside id="shipping-qr-aside" class="w-full xl:w-65 shrink-0 bg-indigo-950 text-white p-4 rounded-xl border border-indigo-900 shadow-md no-print sticky top-4 transition-all duration-300">
+        <div class="flex items-center justify-between border-b border-indigo-800 pb-2 mb-3">
+            <h4 class="font-bold text-amber-300 text-base flex items-center gap-1.5">
+                <span>🔍</span> 引当可能QR在庫
+            </h3>
+            <span class="text-xxs bg-indigo-800 text-indigo-200 px-2 py-0.5 rounded-full font-mono">未割当</span>
+        </div>
+        
+        <div id="shipping-qr-hint-grid" class="flex flex-col gap-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1 font-mono text-xxl">
+            <!-- JavaScriptからカード形式で描画されます -->
+        </div>
+    </aside>
+
+    </div>
+</section>
+
+
+
+
+
+
+
+
+        <!-- ⑤ 出荷履歴確認タブ -->
+        <section id="tab-history" class="tab-content hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold border-b pb-2 mb-3 text-slate-800">⑤ 日別出荷完了履歴</h2>
+                <div id="history-date-buttons" class="flex flex-wrap gap-2 mb-4"></div>
+                <div id="history-data-view" class="space-y-4 hidden">
+                    <h3 class="text-sm font-bold text-slate-800" id="history-selected-date-title"></h3>
+                    <div class="overflow-x-auto border rounded-lg">
+                        <table class="w-full text-left border-collapse text-xxs bg-white">
+                            <thead>
+                                <tr class="bg-slate-100 border-b font-bold"><th class="p-2">配車トラック</th><th class="p-2">要望番号</th><th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">鋼種</th><th class="p-2">線径</th><th class="p-2">重量(kg)</th></tr>
+                            </thead>
+                            <tbody id="history-p2-body" class="divide-y"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+
+<!-- 二色出荷コンテンツエリア -->
+<div id="tab-nisho-shipping" class="tab-content hidden space-y-4 p-4">
+    <div class="bg-slate-800 p-4 rounded-xl text-white space-y-4">
+        <h2 class="text-lg font-bold border-b border-slate-700 pb-2">🚚 二色出荷処理 (Excel一括引落)</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-900 p-4 rounded-lg">
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">出荷日</label>
+                <input type="date" id="nisho-date" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white">
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">対象トラック (1〜5車目)</label>
+                <select id="nisho-truck-select" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-white">
+                    <option value="1">1車目</option>
+                    <option value="2">2車目</option>
+                    <option value="3">3車目</option>
+                    <option value="4">4車目</option>
+                    <option value="5">5車目</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1">Excelファイル選択 (ロット, 子番, [車数])</label>
+                <input type="file" id="nisho-file-input" accept=".xlsx, .xls" class="block w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-slate-700 file:text-white">
+            </div>
+        </div>
+        
+        <div class="flex gap-2">
+            <button onclick="importNishoShipping()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded text-sm">
+                Excel読み込み＆在庫・実績から一括削除
+            </button>
+        </div>
+
+<div class="bg-slate-800 p-4 rounded-xl text-white space-y-3 mt-4">
+    <h3 class="text-md font-bold text-amber-400">📦 実荷揃え実績（Excel）による最終在庫引き落とし</h3>
+    <p class="text-xs text-slate-300">現場で実際に荷揃えしたロット・子番のExcelを取り込み、QR在庫から正式に差し引きます。</p>
+    
+    <div class="flex flex-wrap items-center gap-3 bg-slate-900 p-3 rounded-lg">
+        <input type="file" id="actual-shipping-file" accept=".xlsx, .xls" class="text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-slate-700 file:text-white">
+        <button onclick="importActualShippingExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded text-xs">
+            荷揃え実績を読み込んで在庫引き落とし
+        </button>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+    </div>
+
+
+
+
+
+
+
+
+
+
+    <!-- 出荷履歴表示エリア -->
+    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+        <h3 class="text-md font-bold text-slate-800 mb-2">📋 二色出荷 履歴一覧</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                    <tr class="bg-slate-800 text-white font-bold">
+                        <th class="p-2">出荷日</th>
+                        <th class="p-2">車数</th>
+                        <th class="p-2">ロットNo</th>
+                        <th class="p-2">子番</th>
+                        <th class="p-2">鋼種</th>
+                        <th class="p-2">線径</th>
+                        <th class="p-2">重量(kg)</th>
+                    </tr>
+                </thead>
+                <tbody id="nisho-history-table-body" class="divide-y divide-gray-200">
+                    <!-- JSで描画 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    </div>
+
+    <!-- =========================================================================
+         アプリケーション ロジック
+         ========================================================================= -->
+    <script>
+        // 1. IndexedDB 制御クラス
+
+        const DB_NAME = 'SteelManagementDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'system_data';
+
+        class StorageManager {
+            static open() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            db.createObjectStore(STORE_NAME);
+                        }
+                    };
+                    request.onsuccess = (e) => resolve(e.target.result);
+                    request.onerror = (e) => reject(e.target.error);
+                });
+            }
+
+            static async save(key, data) {
+                const db = await this.open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.put(data, key);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            static async load(key, defaultValue) {
+                const db = await this.open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readonly');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.get(key);
+                    request.onsuccess = () => resolve(request.result !== undefined ? request.result : defaultValue);
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            static async clearAll() {
+                const db = await this.open();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    const request = store.clear();
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            }
+        }
+
+        // 2. データストア & グローバル変数
+        let productionList = [];
+        let qrList = [];
+        let treatmentList = [];
+        let demandList = [];
+        
+        let dailyAllocations = {}; 
+        let dailyAinoriMap = {}; 
+        let currentSelectedDate = "2026/07/01";
+
+        let shippingLogs = {}; 
+        
+        let onoeOutLog = [];
+        let onoeReturnLog = [];
+        let washPlanLog = [];
+        let washDoneLog = [];
+
+        const STATE_KEYS = {
+            productionList: 'productionList',
+            qrList: 'qrList',
+            treatmentList: 'treatmentList',
+            demandList: 'demandList',
+            dailyAllocations: 'dailyAllocations',
+            dailyAinoriMap: 'dailyAinoriMap',
+            shippingLogs: 'shippingLogs',
+            onoeOutLog: 'onoeOutLog',
+            onoeReturnLog: 'onoeReturnLog',
+            washPlanLog: 'washPlanLog',
+            washDoneLog: 'washDoneLog'
+        };
+
+        Object.defineProperty(window, 'currentAllocations', {
+            get: function() {
+                if (!dailyAllocations[currentSelectedDate]) {
+                    dailyAllocations[currentSelectedDate] = [];
+                }
+                return dailyAllocations[currentSelectedDate];
+            },
+            set: function(val) {
+                dailyAllocations[currentSelectedDate] = val;
+            }
+        });
+
+        async function saveState(key) {
+            try {
+                let dataToSave;
+                switch (key) {
+                    case 'productionList': dataToSave = productionList; break;
+                    case 'qrList': dataToSave = qrList; break;
+                    case 'treatmentList': dataToSave = treatmentList; break;
+                    case 'demandList': dataToSave = demandList; break;
+                    case 'dailyAllocations': dataToSave = dailyAllocations; break;
+                    case 'dailyAinoriMap': dataToSave = dailyAinoriMap; break;
+                    case 'shippingLogs': dataToSave = shippingLogs; break;
+                    case 'onoeOutLog': dataToSave = onoeOutLog; break;
+                    case 'onoeReturnLog': dataToSave = onoeReturnLog; break;
+                    case 'washPlanLog': dataToSave = washPlanLog; break;
+                    case 'washDoneLog': dataToSave = washDoneLog; break;
+                }
+                await StorageManager.save(key, JSON.parse(JSON.stringify(dataToSave)));
+            } catch (err) {
+                console.error(`データの保存に失敗しました (${key}):`, err);
+            }
+        }
+
+        async function loadAllStates() {
+            try {
+                productionList = await StorageManager.load(STATE_KEYS.productionList, []);
+                qrList = await StorageManager.load(STATE_KEYS.qrList, []);
+                treatmentList = await StorageManager.load(STATE_KEYS.treatmentList, []);
+                demandList = await StorageManager.load(STATE_KEYS.demandList, []);
+                dailyAllocations = await StorageManager.load(STATE_KEYS.dailyAllocations, {});
+                dailyAinoriMap = await StorageManager.load(STATE_KEYS.dailyAinoriMap, {});
+                
+                const oldAllocations = await StorageManager.load('currentAllocations', null);
+                if (oldAllocations && Array.isArray(oldAllocations) && oldAllocations.length > 0) {
+                    dailyAllocations["2026/07/01"] = oldAllocations;
+                }
+
+                shippingLogs = await StorageManager.load(STATE_KEYS.shippingLogs, {});
+                onoeOutLog = await StorageManager.load(STATE_KEYS.onoeOutLog, []);
+                onoeReturnLog = await StorageManager.load(STATE_KEYS.onoeReturnLog, []);
+                washPlanLog = await StorageManager.load(STATE_KEYS.washPlanLog, []);
+                washDoneLog = await StorageManager.load(STATE_KEYS.washDoneLog, []);
+            } catch (err) {
+                console.error("データの読み込み中にエラーが発生しました:", err);
+                alert("データの読み込みに失敗しました。ページをリロードしてください。");
+            }
+        }
+
+        // 3. バックアップ・復元
+        async function exportBackup() {
+            const backupData = {
+                version: "2026.2",
+                timestamp: new Date().toISOString(),
+                data: {
+                    productionList, qrList, treatmentList, demandList, dailyAllocations, dailyAinoriMap,
+                    shippingLogs, onoeOutLog, onoeReturnLog, washPlanLog, washDoneLog
+                }
+            };
+            const jsonString = JSON.stringify(backupData, null, 2);
+            const blob = new Blob([jsonString], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const now = new Date();
+            const dateStr = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + "_" + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `steel_system_backup_${dateStr}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function triggerBackupImport() { document.getElementById('backup-file-input').click(); }
+        function importBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (!parsed.data) throw new Error("不正なフォーマット");
+                    if (!confirm("データを復元しますか？現在のデータは上書きされます。")) return;
+                    const d = parsed.data;
+                    productionList = d.productionList || [];
+                    qrList = d.qrList || [];
+                    treatmentList = d.treatmentList || [];
+                    demandList = d.demandList || [];
+                    dailyAllocations = d.dailyAllocations || {};
+                    dailyAinoriMap = d.dailyAinoriMap || {};
+                    shippingLogs = d.shippingLogs || {};
+                    onoeOutLog = d.onoeOutLog || [];
+                    onoeReturnLog = d.onoeReturnLog || [];
+                    washPlanLog = d.washPlanLog || [];
+                    washDoneLog = d.washDoneLog || [];
+
+                    await Promise.all([
+                        saveState('productionList'), saveState('qrList'), saveState('treatmentList'),
+                        saveState('demandList'), saveState('dailyAllocations'), saveState('dailyAinoriMap'),
+                        saveState('shippingLogs'), saveState('onoeOutLog'), saveState('onoeReturnLog'),
+                        saveState('washPlanLog'), saveState('washDoneLog')
+                    ]);
+                    alert("復元完了しました。再読み込みします。");
+                    window.location.reload();
+                } catch (err) { alert("ファイルの読み込みに失敗しました。"); }
+            };
+            reader.readAsText(file);
+        }
+
+        async function clearAllSystemData() {
+            if(!confirm("⚠️ システム内の全てのデータを完全に消去しますか？この操作は取り消せません。")) return;
+            await StorageManager.clearAll();
+            alert("データを全消去しました。再読み込みします。");
+            window.location.reload();
+        }
+
+        // 4. 日付フォーマット・変換関数
+        function formatExcelDate(cellVal) {
+            if (!cellVal) return "";
+            let y, m, d;
+            let strVal = String(cellVal).trim();
+            if (strVal.includes('/') || strVal.includes('-')) {
+                let parts = strVal.replace(/-/g, '/').split('/');
+                if (parts.length === 3) {
+                    y = parts[0]; m = String(parts[1]).padStart(2, '0'); d = String(parts[2]).padStart(2, '0');
+                    return `${y}/${m}/${d}`;
+                }
+                return strVal;
+            }
+            let cleanStr = strVal.replace(/[^0-9]/g, "");
+            if (cleanStr.length === 8 && (typeof cellVal === 'string' || cellVal >= 10000000)) {
+                y = cleanStr.substring(0, 4); m = cleanStr.substring(4, 6); d = cleanStr.substring(6, 8);
+                return `${y}/${m}/${d}`;
+            }
+            if (typeof cellVal === 'number' && cellVal < 100000) {
+                let date = new Date((cellVal - 25569) * 86400 * 1000);
+                y = date.getFullYear(); m = String(date.getMonth() + 1).padStart(2, '0'); d = String(date.getDate()).padStart(2, '0');
+                return `${y}/${m}/${d}`;
+            }
+            return strVal;
+        }
+
+        function convertInputDateToSlash(val) {
+            if(!val) return "";
+            return val.replace(/-/g, "/");
+        }
+
+        // 5. アプリケーション コアロジック
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.querySelectorAll('#main-menu button').forEach(btn => btn.classList.remove('bg-slate-800', 'text-white', 'font-bold'));
+            const activeBtn = document.getElementById(`menu-${tabId}`);
+            if(activeBtn) activeBtn.classList.add('bg-slate-800', 'text-white', 'font-bold');
+            if(tabId === 'tab-shipping') { 
+                renderDayTabs();
+                updateShippingUIControls(); 
+                renderShippingPatterns(); 
+            }
+            if(tabId === 'tab-history') { renderHistoryButtons(); }
+        }
+
+        function calculateMatrix(list) {
+            let groups = {};
+            list.forEach(item => {
+                let diaVal = item.diameter || item.diameterLinked || 0;
+                let diaStr = isNaN(parseFloat(diaVal)) ? "-" : parseFloat(diaVal).toFixed(2);
+                const key = `${item.type || item.typeLinked || '不明'}/${diaStr}`;
+                if(!groups[key]) groups[key] = { qty: 0, weight: 0 };
+                groups[key].qty++;
+                groups[key].weight += (item.weight || item.weightLinked || 0);
+            });
+            return groups;
+        }
+
+        function renderMatrixWidget(elementId, matrix) {
+            const el = document.getElementById(elementId);
+            const keys = Object.keys(matrix);
+            if(keys.length === 0) { el.innerHTML = '<span class="text-gray-400">データなし</span>'; return; }
+            el.innerHTML = keys.map(k => `
+                <div class="bg-slate-700/60 p-1 rounded border border-slate-600 font-mono">
+                    <span class="text-amber-400 font-bold">${k}</span>: ${matrix[k].qty}本 (${matrix[k].weight.toLocaleString()}kg)
+                </div>
+            `).join('');
+        }
+
+        function handleExcelImport(type) {
+            let inputId = type === 'production' ? 'prod-file-input' : (type === 'qr' ? 'qr-file-input' : 'demand-file-input');
+            let fileInput = document.getElementById(inputId);
+            if (!fileInput.files || fileInput.files.length === 0) return alert('ファイルを選んでください。');
+
+            let reader = new FileReader();
+            reader.onload = async function(e) {
+                let workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                let sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
+                let importCount = 0;
+                let skipCount = 0;
+
+                sheetData.forEach((row, idx) => {
+                    if (idx === 0 && isNaN(Number(row[5]))) return; 
+                    if (type === 'production' && row.length >= 7) {
+                        productionList.push({
+                            date: formatExcelDate(row[0]), machine: String(row[1]), type: String(row[2]),
+                            diameter: parseFloat(row[3]), lot: String(row[4]).trim(), subNo: parseInt(row[5]),
+                            weight: parseFloat(row[6]), state: String(row[7] || ""),
+                            onoeOut: "", onoeReturn: "", washPlan: "", washDone: ""
+                        });
+                        importCount++;
+                    } else if (type === 'qr' && row.length >= 2) {
+                        let lot = String(row[0]).trim(); 
+                        let subNo = parseInt(row[1]); 
+                        let info = String(row[2] || "").trim();
+
+                        let isDuplicateQR = qrList.some(q => q.lot === lot && q.subNo === subNo);
+                        let isDuplicateTreatment = treatmentList.some(t => t.lot === lot && t.subNo === subNo);
+
+                        if (isDuplicateQR || isDuplicateTreatment) {
+                            skipCount++;
+                        } else {
+                            if(info !== "") { 
+                                treatmentList.push({ lot, subNo, info }); 
+                            } else { 
+                                qrList.push({ lot, subNo }); 
+                            }
+                            importCount++;
+                        }
+                    } else if (type === 'demand' && row.length >= 6) {
+                        let qty = parseInt(row[4]);
+                        demandList.push({
+                            dueDate: formatExcelDate(row[0]), demandNo: String(row[1]), type: String(row[2]),
+                            diameter: parseFloat(row[3]), initialQty: qty, qty: qty, weight: parseFloat(row[5])
+                        });
+                        importCount++;
+                    }
+                });
+                
+                if (type === 'production') { await saveState('productionList'); } 
+                else if (type === 'qr') { await saveState('qrList'); await saveState('treatmentList'); } 
+                else if (type === 'demand') { await saveState('demandList'); }
+
+                let msg = `${importCount}件インポートしました。`;
+                if (type === 'qr' && skipCount > 0) msg += `（重複のため ${skipCount}件 スキップしました）`;
+                alert(msg);
+
+                renderProduction(); renderQR(); renderTreatment(); renderDemand();
+                fileInput.value = "";
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        }
+
+        function renderProduction() {
+            const sType = document.getElementById('p-search-type').value.toLowerCase();
+            const sDia = document.getElementById('p-search-dia').value;
+            const sLot = document.getElementById('p-search-lot').value.toLowerCase();
+            const sSub = document.getElementById('p-search-sub').value;
+
+            const filtered = productionList.filter(item => {
+                return (!sType || item.type.toLowerCase().includes(sType)) &&
+                       (!sDia || String(item.diameter.toFixed(2)).includes(sDia) || String(item.diameter).includes(sDia)) &&
+                       (!sLot || item.lot.toLowerCase().includes(sLot)) &&
+                       (!sSub || String(item.subNo) === sSub);
+            });
+
+            renderMatrixWidget('production-matrix-summary', calculateMatrix(filtered));
+            document.getElementById('p-summary').innerText = `該当：${filtered.length}本 (${filtered.reduce((s, i) => s + i.weight, 0).toLocaleString()} kg)`;
+            
+            document.getElementById('production-table-body').innerHTML = filtered.map(item => `
+                <tr class="hover:bg-slate-50 text-slate-700">
+                    <td class="p-2">${item.date}</td><td class="p-2">${item.machine}</td>
+                    <td class="p-2 font-bold">${item.type}</td><td class="p-2">${item.diameter.toFixed(2)}</td>
+                    <td class="p-2 font-mono">${item.lot}</td><td class="p-2">${item.subNo}</td>
+                    <td class="p-2 font-mono font-bold">${item.weight.toLocaleString()}</td>
+                    <td class="p-2 bg-yellow-50 text-amber-800">${item.state}</td>
+                    <td class="p-2 text-red-600 font-bold">${item.onoeOut}</td>
+                    <td class="p-2 text-blue-600 font-bold">${item.onoeReturn}</td>
+                    <td class="p-2 text-purple-600 font-bold">${item.washPlan}</td>
+                    <td class="p-2 text-emerald-600 font-bold">${item.washDone}</td>
+                    <td class="p-2 text-center no-print">
+                        <button onclick="deleteProduction('${item.lot}', ${item.subNo})" class="text-red-600 border border-red-200 px-1 rounded hover:bg-red-600 hover:text-white">削除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function addProductionManual() {
+            const lot = document.getElementById('p-lot').value.trim();
+            const subNo = parseInt(document.getElementById('p-sub').value);
+            if(!lot || isNaN(subNo)) return alert('ロットNoと子番は必須です');
+
+            productionList.push({
+                date: convertInputDateToSlash(document.getElementById('p-date').value) || "2026/07/01",
+                machine: document.getElementById('p-mach').value, type: document.getElementById('p-type').value,
+                diameter: parseFloat(document.getElementById('p-dia').value) || 0, lot: lot, subNo: subNo,
+                weight: parseFloat(document.getElementById('p-weight').value) || 0,
+                state: document.getElementById('p-state').value, onoeOut: "", onoeReturn: "", washPlan: "", washDone: ""
+            });
+            await saveState('productionList');
+            renderProduction();
+        }
+
+        async function deleteProduction(lot, subNo) {
+            productionList = productionList.filter(p => !(p.lot === lot && p.subNo === subNo));
+            await saveState('productionList');
+            renderProduction(); renderQR(); renderTreatment();
+        }
+
+        function getLinkedQRList() {
+            return qrList.map(qr => {
+                const match = productionList.find(p => p.lot === qr.lot && p.subNo === qr.subNo);
+                return {
+                    lot: qr.lot, subNo: qr.subNo,
+                    date: match ? match.date : '-', type: match ? match.type : '未紐付',
+                    diameter: match ? match.diameter : 0, weight: match ? match.weight : 0
+                };
+            });
+        }
+
+        function renderQR() {
+            const sType = document.getElementById('q-search-type').value.toLowerCase();
+            const sDia = document.getElementById('q-search-dia').value;
+            const sLot = document.getElementById('q-search-lot').value.toLowerCase();
+            const sSub = document.getElementById('q-search-sub').value;
+
+            const linked = getLinkedQRList();
+            const filtered = linked.filter(item => {
+                return (!sType || item.type.toLowerCase().includes(sType)) &&
+                       (!sDia || String(item.diameter.toFixed(2)).includes(sDia) || String(item.diameter).includes(sDia)) &&
+                       (!sLot || item.lot.toLowerCase().includes(sLot)) &&
+                       (!sSub || String(item.subNo) === sSub);
+            });
+
+            let convertedMatrix = {};
+            filtered.forEach(f => {
+                const k = `${f.type}/${f.diameter.toFixed(2)}`;
+                if(!convertedMatrix[k]) convertedMatrix[k] = { qty:0, weight:0 };
+                convertedMatrix[k].qty++; convertedMatrix[k].weight += f.weight;
+            });
+            renderMatrixWidget('qr-matrix-summary', convertedMatrix);
+
+            document.getElementById('q-summary').innerText = `該当：${filtered.length}本 (${filtered.reduce((s, i) => s + i.weight, 0).toLocaleString()} kg)`;
+            document.getElementById('qr-table-body').innerHTML = filtered.map(item => `
+                <tr class="hover:bg-slate-50 text-slate-700">
+                    <td class="p-2 font-mono font-bold">${item.lot}</td><td class="p-2">${item.subNo}</td>
+                    <td class="p-2">${item.date}</td><td class="p-2 font-bold text-blue-700">${item.type}</td>
+                    <td class="p-2">${item.diameter.toFixed(2)}</td><td class="p-2 font-mono">${item.weight.toLocaleString()}</td>
+                    <td class="p-2 text-center no-print">
+                        <button onclick="deleteQR('${item.lot}', ${item.subNo})" class="text-red-500 border border-red-100 px-1 rounded hover:bg-red-50">削除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function deleteQR(lot, subNo) {
+            qrList = qrList.filter(q => !(q.lot === lot && q.subNo === subNo));
+            await saveState('qrList');
+            renderQR();
+        }
+
+        function renderTreatment() {
+            const badge = document.getElementById('treatment-badge');
+            badge.innerText = treatmentList.length;
+            if(treatmentList.length > 0) badge.classList.remove('hidden'); else badge.classList.add('hidden');
+
+            document.getElementById('treatment-table-body').innerHTML = treatmentList.map((item, idx) => {
+                const match = productionList.find(p => p.lot === item.lot && p.subNo === item.subNo);
+                return `
+                <tr class="bg-amber-50 text-slate-700">
+                    <td class="p-2 font-mono">${item.lot}</td><td class="p-2">${item.subNo}</td>
+                    <td class="p-2">${match ? match.date : '-'}</td><td class="p-2 font-bold text-red-700">${match ? match.type : '未紐付'}</td>
+                    <td class="p-2">${match ? match.diameter.toFixed(2) : '-'}</td><td class="p-2 font-mono">${match ? match.weight.toLocaleString() : '0'}</td>
+                    <td class="p-2 text-red-700">${item.info}</td>
+                    <td class="p-2 text-center">
+                        <button onclick="approveTreatment(${idx})" class="bg-emerald-600 text-white px-2 py-0.5 rounded text-xxs">通常在庫へ移動</button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+
+        async function approveTreatment(idx) {
+            let item = treatmentList[idx];
+            treatmentList.splice(idx, 1);
+            qrList.push({ lot: item.lot, subNo: item.subNo });
+            await saveState('treatmentList'); await saveState('qrList');
+            renderQR(); renderTreatment();
+        }
+
+
+        //  二色要望ロジック
+        function renderDemand() {
+            document.getElementById('demand-table-body').innerHTML = demandList.map((item, idx) => `
+                <tr class="hover:bg-slate-50 ${item.qty === 0 ? 'bg-gray-100 text-gray-400 line-through' : ''}">
+                    <td class="p-2">${item.dueDate}</td><td class="p-2 font-bold">${item.demandNo}</td>
+                    <td class="p-2">${item.type}</td><td class="p-2">${item.diameter.toFixed(2)}</td>
+                    <td class="p-2 text-center bg-slate-50">${item.initialQty} 本</td>
+                    <td class="p-2 font-mono">${item.weight.toLocaleString()}</td>
+                    <td class="p-2 font-bold bg-yellow-50 text-center text-yellow-900">${item.qty} 本</td>
+                    <td class="p-2 text-center no-print">
+                        <button onclick="deleteDemand(${idx})" class="text-red-500 border border-red-100 px-2 py-0.5 rounded hover:bg-red-50">削除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function addDemandManual() {
+            const no = document.getElementById('d-no').value.trim();
+            const qty = parseInt(document.getElementById('d-qty').value);
+            if(!no || isNaN(qty)) return alert('情報が不足しています');
+            demandList.push({
+                dueDate: convertInputDateToSlash(document.getElementById('d-date').value) || "2026/07/01",
+                demandNo: no, type: document.getElementById('d-type').value,
+                diameter: parseFloat(document.getElementById('d-dia').value) || 0,
+                initialQty: qty, qty: qty, weight: parseFloat(document.getElementById('d-weight').value) || 0
+            });
+            await saveState('demandList');
+            renderDemand();
+        }
+
+        async function deleteDemand(idx) {
+            if(!confirm("この要望データを一覧から削除しますか？")) return;
+            demandList.splice(idx, 1);
+            await saveState('demandList');
+            renderDemand();
+        }
+
+
+
+        
+        // 表示制御フラグ
+let hideZeroDemand = false;
+//-----------二色要望--------------------------
+
+// 画面表示・サブウィンドウ共通の計算ヘルパー
+function getDemandStats(list) {
+    const totalInitialQty = list.reduce((sum, item) => sum + (item.initialQty || 0), 0);
+    const totalQty = list.reduce((sum, item) => sum + (item.qty || 0), 0);
+    const completedQty = totalInitialQty - totalQty;
+    const progressRate = totalInitialQty > 0 ? ((completedQty / totalInitialQty) * 100).toFixed(1) : '0.0';
+    return { totalInitialQty, totalQty, completedQty, progressRate };
+}
+
+// 二色要望レンダリング（残数0の非表示フィルターを追加）
+function renderDemand() {
+    const listToRender = hideZeroDemand 
+        ? demandList.filter(item => item.qty > 0) 
+        : demandList;
+
+    // 集計データ（※全体の進捗率は非表示フィルターの影響を受けないよう全データから計算）
+    const stats = getDemandStats(demandList);
+    const currentListQty = listToRender.reduce((sum, item) => sum + (item.qty || 0), 0);
+
+    // サマリーエリアの更新
+    const summaryEl = document.getElementById('demand-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = `
+            <div style="display:flex; gap:20px; align-items:center; background:#f8fafc; padding:12px; border-radius:8px; margin-bottom:12px; border:1px solid #e2e8f0; font-size:14px;">
+                <div>残数合計: <strong style="font-size:18px; color:#b45309;">${currentListQty.toLocaleString()} 本</strong></div>
+                <div style="color:#cbd5e1;">|</div>
+                <div>全体丸数: <strong>${stats.totalInitialQty.toLocaleString()} 本</strong></div>
+                <div style="color:#cbd5e1;">|</div>
+                <div>完了数: <strong style="color:#16a34a;">${stats.completedQty.toLocaleString()} 本</strong></div>
+                <div style="color:#cbd5e1;">|</div>
+                <div>進捗率: <strong style="font-size:18px; color:#2563eb;">${stats.progressRate}%</strong> (完了/全体)</div>
+            </div>
+        `;
+    }
+
+
+   document.getElementById('demand-table-body').innerHTML = listToRender.map((item) => {
+        const idx = demandList.indexOf(item);
+        return `
+            <tr class="hover:bg-slate-50 ${item.qty === 0 ? 'bg-gray-100 text-gray-400 line-through' : ''}">
+                <td class="p-2">${item.dueDate}</td>
+                <td class="p-2 font-bold">${item.demandNo}</td>
+                <td class="p-2">${item.type}</td>
+                <td class="p-2">${(item.diameter || 0).toFixed(2)}</td>
+                <td class="p-2 text-center bg-slate-50">${item.initialQty} 本</td>
+                <td class="p-2 font-mono">${(item.weight || 0).toLocaleString()}</td>
+                <td class="p-2 font-bold bg-yellow-50 text-center text-yellow-900">${item.qty} 本</td>
+                <td class="p-2 text-center no-print">
+                    <button onclick="deleteDemand(${idx})" class="text-red-500 border border-red-100 px-2 py-0.5 rounded hover:bg-red-50">削除</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 1. 並び替え機能
+async function sortDemand(key) {
+    demandList.sort((a, b) => {
+        if (key === 'date') {
+            return (a.dueDate || '').localeCompare(b.dueDate || '');
+        } else if (key === 'no') {
+            return (a.demandNo || '').localeCompare(b.demandNo || '', undefined, { numeric: true });
+        } else if (key === 'type') {
+            return (a.type || '').localeCompare(b.type || '');
+        }
+        return 0;
+    });
+    await saveState('demandList');
+    renderDemand();
+}
+
+// 2. 残数0表示/非表示切り替え
+function toggleZeroDemand() {
+    hideZeroDemand = !hideZeroDemand;
+    const btn = document.getElementById('toggle-zero-btn');
+    if (hideZeroDemand) {
+        btn.innerText = '残数0を表示';
+        btn.classList.replace('bg-slate-100', 'bg-amber-100');
+        btn.classList.replace('text-slate-700', 'text-amber-800');
+    } else {
+        btn.innerText = '残数0を非表示';
+        btn.classList.replace('bg-amber-100', 'bg-slate-100');
+        btn.classList.replace('text-amber-800', 'text-slate-700');
+    }
+    renderDemand();
+}
+
+
+
+// 3. 別ウィンドウで表示（合計・進捗率表示 & 並び替え機能付き）
+function openDemandWindow() {
+    const listToRender = hideZeroDemand 
+        ? demandList.filter(item => item.qty > 0) 
+        : demandList;
+
+    const win = window.open('', '_blank', 'width=950,height=900');
+    const initialDataJson = JSON.stringify(listToRender);
+
+    win.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>二色要望一覧 - サブウィンドウ</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; color: #333; }
+                h1 { font-size: 20px; margin-bottom: 15px; }
+                .summary-card { display: flex; gap: 20px; align-items: center; background: #f8fafc; padding: 12px 16px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #e2e8f0; font-size: 14px; }
+                .summary-card strong { font-size: 16px; }
+                .progress-bar-bg { width: 100%; background: #e2e8f0; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 15px; }
+                .progress-bar-fill { height: 100%; background: #2563eb; transition: width 0.3s; }
+                table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+                th { background-color: #f3f4f6; padding: 8px; border-bottom: 2px solid #ccc; cursor: pointer; user-select: none; }
+                th:hover { background-color: #e5e7eb; }
+                td { padding: 8px; border-bottom: 1px solid #ddd; }
+                tfoot td { font-weight: bold; background-color: #f8fafc; border-top: 2px solid #cbd5e1; }
+                .sort-icon { font-size: 11px; color: #666; margin-left: 4px; }
+                .btn-print { margin-bottom: 10px; padding: 6px 12px; cursor: pointer; background: #2563eb; color: #fff; border: none; border-radius: 4px; }
+                @media print { 
+                    .btn-print { display: none; }
+                    th { background-color: #f3f4f6 !important; }
+                }
+            </style>
+        </head>
+        <body>
+            <button class="btn-print" onclick="window.print()">印刷する</button>
+            <h1>二色要望一覧 (${new Date().toLocaleDateString('ja-JP')} 時点)</h1>
+            
+            <div id="sub-summary"></div>
+            <div class="progress-bar-bg"><div id="sub-progress-bar" class="progress-bar-fill"></div></div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('dueDate')">要望納期 <span class="sort-icon">▲▼</span></th>
+                        <th onclick="sortTable('demandNo')">要望番号 <span class="sort-icon">▲▼</span></th>
+                        <th onclick="sortTable('type')">鋼種処理 <span class="sort-icon">▲▼</span></th>
+                        <th onclick="sortTable('diameter')">線径 <span class="sort-icon">▲▼</span></th>
+                        <th onclick="sortTable('initialQty')">要望丸数(初期) <span class="sort-icon">▲▼</span></th>
+                        <th onclick="sortTable('weight')">初期重量(kg) <span class="sort-icon">▲▼</span></th>
+                        <th onclick="sortTable('qty')">現在の残数 <span class="sort-icon">▲▼</span></th>
+                    </tr>
+                </thead>
+                <tbody id="sub-table-body"></tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4" style="text-align:right;">合計:</td>
+                        <td id="foot-initial" style="text-align:center;">-</td>
+                        <td id="foot-weight">-</td>
+                        <td id="foot-qty" style="text-align:center; background-color:#fefce8; color:#b45309;">-</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <script>
+                var currentData = ${initialDataJson};
+                var sortAsc = true;
+                var currentSortKey = '';
+
+                function updateSummary(data) {
+                    var totalInitial = 0;
+                    var totalQty = 0;
+                    var totalWeight = 0;
+
+                    for (var i = 0; i < data.length; i++) {
+                        totalInitial += (data[i].initialQty || 0);
+                        totalQty += (data[i].qty || 0);
+                        totalWeight += (data[i].weight || 0);
+                    }
+
+                    var completed = totalInitial - totalQty;
+                    var rate = totalInitial > 0 ? ((completed / totalInitial) * 100).toFixed(1) : '0.0';
+
+                    document.getElementById('sub-summary').innerHTML = 
+                        '<div class="summary-card">' +
+                        '<div>現在の表示残数合計: <strong style="color:#b45309;">' + totalQty.toLocaleString() + ' 本</strong></div>' +
+                        '<div style="color:#cbd5e1;">|</div>' +
+                        '<div>初期丸数合計: <strong>' + totalInitial.toLocaleString() + ' 本</strong></div>' +
+                        '<div style="color:#cbd5e1;">|</div>' +
+                        '<div>完了丸数: <strong style="color:#16a34a;">' + completed.toLocaleString() + ' 本</strong></div>' +
+                        '<div style="color:#cbd5e1;">|</div>' +
+                        '<div>進捗率: <strong style="color:#2563eb;">' + rate + '%</strong></div>' +
+                        '</div>';
+
+                    document.getElementById('sub-progress-bar').style.width = rate + '%';
+
+                    document.getElementById('foot-initial').innerText = totalInitial.toLocaleString() + ' 本';
+                    document.getElementById('foot-weight').innerText = totalWeight.toLocaleString();
+                    document.getElementById('foot-qty').innerText = totalQty.toLocaleString() + ' 本';
+                }
+
+                function renderSubTable(data) {
+                    var tbody = document.getElementById('sub-table-body');
+                    var html = '';
+                    for (var i = 0; i < data.length; i++) {
+                        var item = data[i];
+                        var rowStyle = item.qty === 0 ? 'background-color:#f3f4f6; color:#9ca3af; text-decoration:line-through;' : '';
+                        html += '<tr style="' + rowStyle + '">' +
+                            '<td>' + (item.dueDate || '') + '</td>' +
+                            '<td style="font-weight:bold;">' + (item.demandNo || '') + '</td>' +
+                            '<td>' + (item.type || '') + '</td>' +
+                            '<td>' + Number(item.diameter || 0).toFixed(2) + '</td>' +
+                            '<td style="text-align:center;">' + item.initialQty + ' 本</td>' +
+                            '<td>' + Number(item.weight || 0).toLocaleString() + '</td>' +
+                            '<td style="text-align:center; font-weight:bold; background-color:#fefce8;">' + item.qty + ' 本</td>' +
+                            '</tr>';
+                    }
+                    tbody.innerHTML = html;
+                    updateSummary(data);
+                }
+
+                function sortTable(key) {
+                    if (currentSortKey === key) {
+                        sortAsc = !sortAsc;
+                    } else {
+                        currentSortKey = key;
+                        sortAsc = true;
+                    }
+
+                    currentData.sort(function(a, b) {
+                        var valA = a[key] !== undefined ? a[key] : '';
+                        var valB = b[key] !== undefined ? b[key] : '';
+                        var result = 0;
+                        if (typeof valA === 'number' && typeof valB === 'number') {
+                            result = valA - valB;
+                        } else {
+                            result = String(valA).localeCompare(String(valB), undefined, { numeric: true });
+                        }
+                        return sortAsc ? result : -result;
+                    });
+
+                    renderSubTable(currentData);
+                }
+
+                renderSubTable(currentData);
+            <\/script>
+        </body>
+        </html>
+    `);
+    win.document.close();
+}
+
+
+
+
+
+        // 6. 尾上・二色特殊業務ロジック
+        function importOnoe(mode) {
+            let pickerId = mode === 'out' ? 'onoe-out-date-picker' : 'onoe-return-date-picker';
+            let fileId = mode === 'out' ? 'onoe-out-file' : 'onoe-return-file';
+            let dateVal = convertInputDateToSlash(document.getElementById(pickerId).value) || "2026/07/01";
+            let fileInput = document.getElementById(fileId);
+            
+            if(!fileInput.files || fileInput.files.length===0) return alert('ファイルを選択してください');
+
+            let reader = new FileReader();
+            reader.onload = async function(e) {
+                let workbook = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+                let sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header:1, defval:""});
+                sheetData.forEach((row, idx) => {
+                    if(idx===0) return;
+                    let lot = String(row[0]).trim(); let sub = parseInt(row[1]);
+                    if(!lot) return;
+                    
+                    if(mode==='out') {
+                        onoeOutLog.push({ date: dateVal, lot, subNo: sub });
+                        updateProductionStatus(lot, sub, 'onoeOut', dateVal); 
+                    } else {
+                        let w = parseFloat(row[2]) || 0;
+                        let note = String(row[3] || "").trim();
+                        onoeReturnLog.push({ date: dateVal, lot, subNo: sub, weight: w, note: note });
+                        updateProductionStatus(lot, sub, 'onoeReturn', dateVal, w); 
+                        if(note !== "") {
+                            updateProductionNote(lot, sub, note);
+                        }
+                    }
+                });
+
+                if(mode==='out') { await saveState('onoeOutLog'); } 
+                else { await saveState('onoeReturnLog'); }
+                await saveState('productionList');
+
+                alert('インポート＆自動紐付を完了しました');
+                renderOnoeLogs(); renderProduction(); renderTreatment();
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        }
+
+        async function processOnoeManual(mode) {
+            let dateInputId = mode === 'out' ? 'onoe-out-manual-date' : 'onoe-return-manual-date';
+            let lotId = mode === 'out' ? 'onoe-out-manual-lot' : 'onoe-return-manual-lot';
+            let subId = mode === 'out' ? 'onoe-out-manual-sub' : 'onoe-return-manual-sub';
+
+            let rawDate = document.getElementById(dateInputId).value;
+            let lot = document.getElementById(lotId).value.trim();
+            let sub = parseInt(document.getElementById(subId).value);
+
+            if(!rawDate) return alert('日付を入力してください');
+            if(!lot || isNaN(sub)) return alert('入力を確認してください');
+
+            let formattedDate = convertInputDateToSlash(rawDate);
+
+            if(mode==='out') {
+                onoeOutLog.push({ date: formattedDate, lot, subNo: sub });
+                updateProductionStatus(lot, sub, 'onoeOut', formattedDate); 
+                await saveState('onoeOutLog');
+            } else {
+                let w = parseFloat(document.getElementById('onoe-return-manual-w').value) || 0;
+                let note = document.getElementById('onoe-return-manual-note').value.trim();
+                onoeReturnLog.push({ date: formattedDate, lot, subNo: sub, weight: w, note: note });
+                updateProductionStatus(lot, sub, 'onoeReturn', formattedDate, w); 
+                if(note !== "") {
+                    updateProductionNote(lot, sub, note);
+                }
+                await saveState('onoeReturnLog');
+            }
+            await saveState('productionList');
+            renderOnoeLogs(); renderProduction(); renderTreatment(); alert('処理完了');
+        }
+
+        function renderOnoeLogs() {
+            document.getElementById('onoe-out-table-body').innerHTML = onoeOutLog.map(l => `
+                <tr><td class="p-2">${l.date}</td><td class="p-2 font-mono">${l.lot}</td><td class="p-2">${l.subNo}</td><td class="p-2 text-emerald-600 font-bold">✓ 紐付完了</td></tr>
+            `).join('');
+            document.getElementById('onoe-return-table-body').innerHTML = onoeReturnLog.map(l => `
+                <tr><td class="p-2">${l.date}</td><td class="p-2 font-mono">${l.lot}</td><td class="p-2">${l.subNo}</td><td class="p-2 font-bold text-right">${l.weight}</td><td class="p-2 text-gray-600">${l.note || ''}</td><td class="p-2 text-emerald-600 font-bold">✓ 紐付完了</td></tr>
+            `).join('');
+        }
+
+        function importWash(mode) {
+            let pickerId = mode === 'plan' ? 'wash-plan-date-picker' : 'wash-done-date-picker';
+            let fileId = mode === 'plan' ? 'wash-plan-file' : 'wash-done-file';
+            let dateVal = convertInputDateToSlash(document.getElementById(pickerId).value) || "2026/07/01";
+            let fileInput = document.getElementById(fileId);
+
+            if(!fileInput.files || fileInput.files.length===0) return alert('ファイル指定が必要です');
+
+            let reader = new FileReader();
+            reader.onload = async function(e) {
+                let workbook = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+                let sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header:1, defval:""});
+                sheetData.forEach((row, idx) => {
+                    if(idx===0) return;
+                    let lot = String(row[0]).trim(); let sub = parseInt(row[1]);
+                    if(!lot) return;
+
+                    if(mode==='plan') {
+                        let match = productionList.find(p=>p.lot===lot && p.subNo===sub);
+                        washPlanLog.push({ date: dateVal, lot, subNo: sub, type: match?match.type:'-', dia: match?match.diameter:0, w: match?match.weight:0 });
+                        updateProductionStatus(lot, sub, 'washPlan', '二色洗い予定');
+                    } else {
+                        washDoneLog.push({ date: dateVal, lot, subNo: sub });
+                        updateProductionStatus(lot, sub, 'washDone', '二色洗い済み');
+                    }
+                });
+
+                if(mode==='plan') { await saveState('washPlanLog'); } 
+                else { await saveState('washDoneLog'); }
+                await saveState('productionList');
+
+                alert('インポート＆ステータス更新を完了しました');
+                renderWashLogs(); renderProduction(); renderTreatment();
+            };
+            reader.readAsArrayBuffer(fileInput.files[0]);
+        }
+
+        async function processWashManual(mode) {
+            let lot = document.getElementById(mode==='plan'?'wash-plan-manual-lot':'wash-done-manual-lot').value.trim();
+            let sub = parseInt(document.getElementById(mode==='plan'?'wash-plan-manual-sub':'wash-done-manual-sub').value);
+            if(!lot || isNaN(sub)) return alert('入力を確認してください');
+
+            let today = "2026/07/01";
+            if(mode==='plan') {
+                let match = productionList.find(p=>p.lot===lot && p.subNo===sub);
+                washPlanLog.push({ date: today, lot, subNo: sub, type: match?match.type:'-', dia: match?match.diameter:0, w: match?match.weight:0 });
+                updateProductionStatus(lot, sub, 'washPlan', '二色洗い予定');
+                await saveState('washPlanLog');
+            } else {
+                washDoneLog.push({ date: today, lot, subNo: sub });
+                updateProductionStatus(lot, sub, 'washDone', '二色洗い済み');
+                await saveState('washDoneLog');
+            }
+            await saveState('productionList');
+            renderWashLogs(); renderProduction(); renderTreatment(); alert('処理完了');
+        }
+
+        function renderWashLogs() {
+            document.getElementById('wash-plan-table-body').innerHTML = washPlanLog.map(l => `
+                <tr><td class="p-2">${l.date}</td><td class="p-2 font-mono font-bold">${l.lot}</td><td class="p-2">${l.subNo}</td><td class="p-2">${l.type}</td><td class="p-2">${l.dia.toFixed(2)}</td><td class="p-2 font-bold">${l.w}</td></tr>
+            `).join('');
+            document.getElementById('wash-done-table-body').innerHTML = washDoneLog.map(l => `
+                <tr><td class="p-2">${l.date}</td><td class="p-2 font-mono">${l.lot}</td><td class="p-2">${l.subNo}</td><td class="p-2 text-emerald-600 font-bold">払い戻し済（済み）</td></tr>
+            `).join('');
+        }
+
+        function updateProductionStatus(lot, subNo, property, txt, newWeight=null) {
+            let match = productionList.find(p => p.lot === lot && p.subNo === subNo);
+            if(match) {
+                match[property] = txt;
+                if(newWeight !== null) match.weight = newWeight;
+            }
+        }
+
+        function updateProductionNote(lot, subNo, noteText) {
+            let match = productionList.find(p => p.lot === lot && p.subNo === subNo);
+            if(match) {
+                match.state = noteText; 
+            }
+        }
+
+        // 7. 出荷配車コアエンジン
+        function onShippingYearMonthChange() {
+            renderDayTabs();
+        }
+
+        function renderDayTabs() {
+            const year = document.getElementById('shipping-year-select').value;
+            const month = document.getElementById('shipping-month-select').value;
+            const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
+            
+            const tabContainer = document.getElementById('shipping-day-tabs');
+            let html = '';
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayStr = String(day).padStart(2, '0');
+                const fullDate = `${year}/${month}/${dayStr}`;
+                const isActive = (fullDate === currentSelectedDate);
+                
+                const hasData = (dailyAllocations[fullDate] && dailyAllocations[fullDate].length > 0);
+                const badgeDot = hasData ? `<span class="inline-block w-2 h-2 rounded-full bg-amber-400 ml-1"></span>` : '';
+
+                html += `
+                    <button onclick="selectShippingDate('${fullDate}')" 
+                            class="px-3 py-1.5 rounded-lg font-bold text-xs shrink-0 transition-all flex items-center justify-center border ${
+                                isActive 
+                                    ? 'bg-amber-400 text-slate-900 border-amber-400 shadow-lg scale-105 font-black' 
+                                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+                            }">
+                        ${day}日${badgeDot}
+                    </button>
+                `;
+            }
+            tabContainer.innerHTML = html;
+
+            const currentDayNum = parseInt(currentSelectedDate.split('/')[2] || '01');
+            if (currentDayNum > daysInMonth) {
+                selectShippingDate(`${year}/${month}/01`);
+            } else {
+                const newFormattedDate = `${year}/${month}/${String(currentDayNum).padStart(2, '0')}`;
+                if (currentSelectedDate !== newFormattedDate) {
+                    selectShippingDate(newFormattedDate);
+                }
+            }
+        }
+
+        function selectShippingDate(dateStr) {
+            currentSelectedDate = dateStr;
+            document.getElementById('shipping-plan-date').value = currentSelectedDate;
+
+            renderDayTabs();
+            loadAinoriCurrentInputs();
+            updateShippingUIControls();
+            renderShippingPatterns();
+        }
+
+        function updateTargetDatePrintTitle() {
+            document.getElementById('p1-title-date').innerText = `【出荷一覧表 要望別まとめ】(${currentSelectedDate})`;
+            document.title = '尾上・二色出荷管理システム';
+            //document.title = `出荷計画書_${currentSelectedDate.replace(/\//g, '')}`;
+        }
+
+
+
+
+
+        function updateShippingUIControls() {
+            const truckCount = parseInt(document.getElementById('truck-count').value) || 3;
+            
+            let otherDaysAllocatedQRKeys = new Set();
+            Object.keys(dailyAllocations).forEach(dKey => {
+                if (dKey !== currentSelectedDate) {
+                    (dailyAllocations[dKey] || []).forEach(a => {
+                        otherDaysAllocatedQRKeys.add(`${a.qrItem.lot}_${a.qrItem.subNo}`);
+                    });
+                }
+            });
+
+            document.getElementById('select-demand').innerHTML = demandList.map(d => {
+                let allocatedCount = currentAllocations.filter(a => a.demandNo === d.demandNo).length;
+                let currentRemaining = Math.max(0, d.qty - allocatedCount);
+                if (currentRemaining <= 0) return ''; 
+                return `<option value="${d.demandNo}">${d.demandNo} [${d.type} / 径:${d.diameter.toFixed(2)}] (配車残:${currentRemaining}本)</option>`;
+            }).join('');
+
+            document.getElementById('select-truck').innerHTML = Array.from({length: truckCount}, (_, i) => `<option value="${i+1}">トラック ${i+1}車目</option>`).join('');
+            
+            let availQRs = getLinkedQRList().filter(qr => {
+                const key = `${qr.lot}_${qr.subNo}`;
+                const isAllocatedInCurrentDay = currentAllocations.some(a => a.qrItem.lot === qr.lot && a.qrItem.subNo === qr.subNo);
+                return !isAllocatedInCurrentDay && !otherDaysAllocatedQRKeys.has(key);
+            });
+
+
+
+
+
+            
+
+            let hintGroups = {};
+            availQRs.forEach(q => {
+            let k = `${q.type}/径${q.diameter.toFixed(2)}`;
+            if(!hintGroups[k]) hintGroups[k] = 0; 
+            hintGroups[k]++;
+            });
+
+            // キーを取得して昇順ソート（鋼種名 → 線径の順で並びます）
+            let sortedKeys = Object.keys(hintGroups).sort((a, b) => 
+            a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+            );
+
+            document.getElementById('shipping-qr-hint-grid').innerHTML = sortedKeys.map(k => `
+            <div class="bg-indigo-950 p-1 rounded border border-indigo-700">📌 ${k} -> <span class="text-yellow-400 font-bold">${hintGroups[k]}本</span></div>
+            `).join('');
+
+
+
+
+
+            document.getElementById('shipping-wash-hint').innerHTML = washPlanLog.map(w => `<span class="bg-purple-200 text-purple-900 font-mono px-1.5 py-0.5 rounded text-xxs">ロット:${w.lot} (${w.type})</span>`).join('');
+            updateManualSelectableQRCount(); updateTargetDatePrintTitle();
+        }
+
+        function updateManualSelectableQRCount() {
+            const dNo = document.getElementById('select-demand').value;
+            if(!dNo) {
+                document.getElementById('select-qr-item').innerHTML = '<option value="">対象なし</option>';
+                document.getElementById('manual-available-hint').innerText = `※手動配車可能な対象要望がありません。`;
+                return;
+            }
+            const demand = demandList.find(d => d.demandNo === dNo);
+            let availableQRs = getLinkedQRList().filter(qr => qr.type === demand.type && qr.diameter === demand.diameter && !currentAllocations.some(a => a.qrItem.lot === qr.lot && a.qrItem.subNo === qr.subNo));
+
+            if (availableQRs.length === 0) {
+                document.getElementById('select-qr-item').innerHTML = '<option value="">引当可能な在庫がありません</option>';
+            } else {
+                document.getElementById('select-qr-item').innerHTML = availableQRs.map(qr => `<option value="${qr.lot}_${qr.subNo}">ロット:${qr.lot} / 子番:${qr.subNo} (${qr.weight.toLocaleString()}kg)</option>`).join('');
+            }
+            document.getElementById('manual-available-hint').innerText = `※現在この仕様の引き当て可能在庫：${availableQRs.length} 本`;
+        }
+
+
+
+
+        function saveAinoriCurrentInputs() {
+            const data = [];
+            for(let i=1; i<=3; i++) {
+                data.push({
+                    name: document.getElementById(`ainori-name-${i}`).value || '',
+                    detail: document.getElementById(`ainori-detail-${i}`).value ||  '', // ★詳細を追加
+                    qty: document.getElementById(`ainori-qty-${i}`).value || '',
+                    w: document.getElementById(`ainori-w-${i}`).value || '',
+                    loc: document.getElementById(`ainori-loc-${i}`).value || ''
+                });
+            }
+            dailyAinoriMap[currentSelectedDate] = data;
+            saveState('dailyAinoriMap');
+        }
+
+        function loadAinoriCurrentInputs() {
+            const data = dailyAinoriMap[currentSelectedDate] || [{}, {}, {}];
+            for(let i=1; i<=3; i++) {
+                const item = data[i-1] || {};
+                document.getElementById(`ainori-name-${i}`).value = item.name || '';
+                document.getElementById(`ainori-detail-${i}`).value = item.detail || ''; // ★詳細を追加
+                document.getElementById(`ainori-qty-${i}`).value = item.qty || '';
+                document.getElementById(`ainori-w-${i}`).value = item.w || '';
+                document.getElementById(`ainori-loc-${i}`).value = item.loc || '';
+            }
+        }
+
+
+
+        function clearAinoriInputs() {
+            for(let i=1; i<=3; i++) {
+                document.getElementById(`ainori-name-${i}`).value = '';
+                document.getElementById(`ainori-detail-${i}`).value = ''; // ★詳細を追加
+                document.getElementById(`ainori-qty-${i}`).value = '';
+                document.getElementById(`ainori-w-${i}`).value = '';
+                document.getElementById(`ainori-loc-${i}`).value = '';
+            }
+            saveAinoriCurrentInputs();
+            renderShippingPatterns();
+        }
+
+
+
+        // 合積みExcelファイルの選択ダイアログを開く
+        function triggerAinoriImport() {
+            document.getElementById('ainori-file-input').click();
+        }
+
+
+
+
+
+        // 日付文字列から「日（1〜31）」の数値を取り出す補助関数
+function extractDayNumber(dateVal) {
+    if (dateVal === null || dateVal === undefined) return null;
+    let str = String(dateVal).trim();
+    if (!str) return null;
+
+    // Excelのシリアル値（数値）の場合の変換
+    if (!isNaN(str) && Number(str) > 30000) {
+        const d = XLSX.SSF.parse_date_code(Number(str));
+        if (d && d.d) return d.d;
+    }
+
+    // 「2026-08-15」や「2026/8/15」などの形式から末尾の日を取得
+    const match = str.match(/(\d{1,2})$/);
+    if (match) {
+        const day = parseInt(match[1], 10);
+        if (day >= 1 && day <= 31) return day;
+    }
+
+    // 単体の数値（「15」など）
+    const num = parseInt(str, 10);
+    if (!isNaN(num) && num >= 1 && num <= 31) {
+        return num;
+    }
+
+    return null;
+}
+
+// すべての日付（全日程）に合積みExcelデータを一括インポートする関数
+function importAinoriExcel(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+
+            if (sheetData.length <= 1) {
+                alert("有効なデータが見つかりませんでした。");
+                return;
+            }
+
+            const currentYear = document.getElementById('shipping-year-select').value;
+            const currentMonth = document.getElementById('shipping-month-select').value;
+            const importedGrouped = {};
+
+            // ヘッダー（0行目）を除外して1行ずつ解析
+            sheetData.slice(1).forEach(row => {
+                const rawDate = row[0];
+                const productName = row[1];
+
+                if (!productName || String(productName).trim() === "") return;
+
+                const dayNum = extractDayNumber(rawDate);
+                if (dayNum !== null) {
+                    const dayStr = String(dayNum).padStart(2, '0');
+                    const fullDate = `${currentYear}/${currentMonth}/${dayStr}`;
+
+                    if (!importedGrouped[fullDate]) {
+                        importedGrouped[fullDate] = [];
+                    }
+
+                    if (importedGrouped[fullDate].length < 3) {
+                        importedGrouped[fullDate].push({
+                            name: row[1] !== undefined ? String(row[1]) : '',
+                            detail: row[2] !== undefined ? String(row[2]) : '', // ★3列目を詳細として読み込み
+                            qty:  row[3] !== undefined ? String(row[3]) : '',
+                            w:    row[4] !== undefined ? String(row[4]) : '',
+                            loc:  row[5] !== undefined ? String(row[5]) : ''
+                        });
+                    }
+                }
+            });
+
+            const importedDates = Object.keys(importedGrouped);
+            if (importedDates.length === 0) {
+                alert("取り込み可能な日付データが見つかりませんでした。");
+                return;
+            }
+
+            // 各日付ごとに補完（最大3件の枠）して dailyAinoriMap に保存
+            importedDates.forEach(dateKey => {
+                const items = importedGrouped[dateKey];
+                dailyAinoriMap[dateKey] = [
+
+                    { name: items[0]?.name || '', detail: items[0]?.detail || '', qty: items[0]?.qty || '', w: items[0]?.w || '', loc: items[0]?.loc || '' },
+                    { name: items[1]?.name || '', detail: items[1]?.detail || '', qty: items[1]?.qty || '', w: items[1]?.w || '', loc: items[1]?.loc || '' },
+                    { name: items[2]?.name || '', detail: items[2]?.detail || '', qty: items[2]?.qty || '', w: items[2]?.w || '', loc: items[2]?.loc || '' }
+                ];
+            });
+
+            await saveState('dailyAinoriMap');
+
+            // 画面入力フォームおよび配送パターンの再描画
+            loadAinoriCurrentInputs();
+            renderShippingPatterns();
+
+            alert(`全 ${importedDates.length} 日分の合積み情報をインポートしました！`);
+        } catch (err) {
+            console.error("合積みインポート処理中にエラーが発生しました:", err);
+            alert("合積みデータの読み込みに失敗しました。ファイル形式をご確認ください。");
+        } finally {
+            event.target.value = ""; // ファイル入力のクリア
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+
+
+
+
+
+
+
+        // 1日〜31日までの全合積みデータをまとめてExcel出力（OneDrive/指定フォルダ対応）
+async function exportMonthlyAinoriExcel() {
+    let rows = [];
+    rows.push(["日付", "製品名", "詳細", "本数", "重量(kg)", "積み込み場所", "トラック番号"]); // ★列追加
+
+    let totalCount = 0;
+    const dates = Object.keys(dailyAinoriMap).sort();
+
+    dates.forEach(dKey => {
+        const dayData = dailyAinoriMap[dKey] || [];
+        dayData.forEach(item => {
+            if (item.name && item.name.trim() !== "") {
+                rows.push([
+                    dKey,
+                    item.name.trim(),
+                    item.detail ? item.detail.trim() : "", // ★詳細を出力
+                    parseInt(item.qty) || 0,
+                    parseFloat(item.w) || 0,
+                    item.loc ? item.loc.trim() : "",
+                    "トラック 1車目"
+                ]);
+                totalCount++;
+            }
+        });
+    });
+
+    if (totalCount === 0) {
+        return alert("1日〜31日の中で登録されている合積みデータがありません。");
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "合積み一括データ");
+
+    const year = document.getElementById('shipping-year-select').value;
+    const month = document.getElementById('shipping-month-select').value;
+    const fileName = `aidumi_all_days_${year}${month}.xlsx`;
+
+    // File System Access API に対応している場合（Chrome / Edge 等）
+    if ('showSaveFilePicker' in window) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: fileName,
+                types: [{
+                    description: 'Excel File',
+                    accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+                }]
+            });
+            const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const writable = await handle.createWritable();
+            await writable.write(excelBuffer);
+            await writable.close();
+            alert(`合積みデータを指定の場所に保存しました（全${totalCount}件）。`);
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error("ファイル保存エラー:", err);
+                alert("保存処理中にエラーが発生しました。");
+            }
+        }
+    } else {
+        // 非対応ブラウザの場合は従来のダウンロード処理
+        XLSX.writeFile(wb, fileName);
+        alert(`1〜31日の合積みデータをまとめ出力しました（全${totalCount}件）。\nファイル名: ${fileName}`);
+    }
+}
+
+
+
+
+
+
+
+
+
+        
+
+        function getAinoriTotalWeight() {
+            let totalAinoriW = 0;
+            for(let i=1; i<=3; i++) {
+                let name = document.getElementById(`ainori-name-${i}`).value.trim();
+                let w = parseFloat(document.getElementById(`ainori-w-${i}`).value) || 0;
+                if(name !== "") totalAinoriW += w;
+            }
+            return totalAinoriW;
+        }
+
+        async function autoAllocate() {
+            clearAllocationWithoutSave();
+            const truckCount = parseInt(document.getElementById('truck-count').value) || 3;
+            let sortedDemands = [...demandList].filter(d => d.qty > 0);
+            let availableQRs = getLinkedQRList();
+            let trucks = Array.from({length: truckCount}, (_, i) => {
+                let baseWeight = (i === 0) ? getAinoriTotalWeight() : 0; 
+                return { id: i+1, count: 0, weight: baseWeight };
+            });
+
+            for (let demand of sortedDemands) {
+                let neededQty = demand.qty;
+                for (let i = 0; i < availableQRs.length; i++) {
+                    if (neededQty <= 0) break;
+                    let qr = availableQRs[i];
+                    if (qr.type === demand.type && qr.diameter === demand.diameter) {
+                        let targetTruck = trucks.find(t => (t.count + 1 <= 16) && (t.weight + qr.weight <= 12000));
+                        if(targetTruck) {
+                            targetTruck.count++; targetTruck.weight += qr.weight;
+                            currentAllocations.push({ truckNo: targetTruck.id, demandNo: demand.demandNo, dueDate: demand.dueDate, qrItem: qr });
+                            availableQRs.splice(i, 1); i--; neededQty--;
+                        }
+                    }
+                }
+            }
+            await saveState('dailyAllocations'); 
+            renderDayTabs();
+            updateShippingUIControls(); 
+            renderShippingPatterns();
+        }
+
+        function clearAllocationWithoutSave() { currentAllocations = []; }
+        async function clearAllocation() { 
+            clearAllocationWithoutSave(); 
+            await saveState('dailyAllocations');
+            renderDayTabs();
+            updateShippingUIControls(); 
+            renderShippingPatterns(); 
+        }
+
+
+
+
+      
+
+        async function addManualAllocationWithQty() {
+            const dNo = document.getElementById('select-demand').value;
+            const qrValue = document.getElementById('select-qr-item').value;
+            const reqQty = parseInt(document.getElementById('manual-qty').value) || 0;
+            const truckNo = parseInt(document.getElementById('select-truck').value);
+
+            if(!dNo || !qrValue || qrValue.includes('ない') || reqQty <= 0) return alert('入力内容を確認してください。');
+            const demand = demandList.find(d => d.demandNo === dNo);
+            
+            let allocatedCount = currentAllocations.filter(a => a.demandNo === dNo).length;
+            if (allocatedCount + reqQty > demand.qty) return alert(`要望残数を超えています。`);
+
+            let availableQRs = getLinkedQRList().filter(qr => qr.type === demand.type && qr.diameter === demand.diameter && !currentAllocations.some(a => a.qrItem.lot === qr.lot && a.qrItem.subNo === qr.subNo));
+            const [lot, subNo] = qrValue.split('_');
+            const firstQRIndex = availableQRs.findIndex(qr => qr.lot === lot && qr.subNo == subNo);
+            if (firstQRIndex === -1) return alert('在庫が見つかりません。');
+            
+            const firstQR = availableQRs.splice(firstQRIndex, 1)[0]; availableQRs.unshift(firstQR);
+            if (availableQRs.length < reqQty) return alert(`在庫不足です。`);
+
+            let truckAllocations = currentAllocations.filter(a => a.truckNo === truckNo);
+            let currentTruckWeight = truckAllocations.reduce((sum, a) => sum + a.qrItem.weight, 0);
+            if (truckNo === 1) currentTruckWeight += getAinoriTotalWeight();
+
+            let additionalWeight = 0;
+            for (let i = 0; i < reqQty; i++) { additionalWeight += availableQRs[i].weight; }
+            if (truckAllocations.length + reqQty > 16) return alert(`本数オーバー`);
+            if (currentTruckWeight + additionalWeight > 12300) return alert(`重量オーバー`);
+
+            for (let i = 0; i < reqQty; i++) {
+                currentAllocations.push({ truckNo, demandNo: dNo, dueDate: demand.dueDate, qrItem: availableQRs[i] });
+            }
+            await saveState('dailyAllocations'); 
+            renderDayTabs();
+            updateShippingUIControls(); 
+            renderShippingPatterns();
+            document.getElementById('manual-qty').value = 1;
+        }
+
+        //async function removeIndividualAllocation(lot, subNo) {
+        //    currentAllocations = currentAllocations.filter(a => !(a.qrItem.lot === lot && a.qrItem.subNo === subNo));
+        //    await saveState('dailyAllocations'); 
+        //    renderDayTabs();
+        //    updateShippingUIControls(); 
+        //    renderShippingPatterns();
+        //}
+
+        
+
+        async function removeAllocation(idx) {
+            currentAllocations.splice(idx, 1);
+            await saveState('dailyAllocations');
+            renderDayTabs(); updateShippingUIControls(); renderShippingPatterns();
+        }
+
+
+        
+    //renderShippingPatterns------------------------/
+
+    function renderShippingPatterns() {
+            const truckCount = parseInt(document.getElementById('truck-count').value) || 3;
+            let groupedDemands = {};
+            let truckTotals = Array.from({length: truckCount}, (_, i) => ({ count: 0, weight: (i===0 ? getAinoriTotalWeight() : 0) }));
+
+            let grandTotalQty = 0;
+            let grandTotalWeight = 0;
+
+            currentAllocations.forEach((alloc, idx) => {
+                // 要望番号 と トラック番号 の組み合わせをキーにして行を分離
+                let key = `${alloc.demandNo}_${alloc.truckNo}`;
+                if (!groupedDemands[key]) {
+                    groupedDemands[key] = { 
+                        demandNo: alloc.demandNo, 
+                        dueDate: alloc.dueDate, 
+                        type: alloc.qrItem.type, 
+                        diameter: alloc.qrItem.diameter, 
+                        truckNo: alloc.truckNo, 
+                        qty: 0, 
+                        weight: 0, 
+                        indices: [] 
+                    };
+                }
+                groupedDemands[key].qty++; 
+                groupedDemands[key].weight += alloc.qrItem.weight; 
+                groupedDemands[key].indices.push(idx);
+
+                if (truckTotals[alloc.truckNo - 1]) {
+                    truckTotals[alloc.truckNo - 1].count++; 
+                    truckTotals[alloc.truckNo - 1].weight += alloc.qrItem.weight;
+                }
+
+                // 全体合計の集計
+                grandTotalQty++;
+                grandTotalWeight += alloc.qrItem.weight;
+            });
+
+            // トラック番号(truckNo)の昇順にソート（同じトラック内は要望番号順）
+            const sortedDemands = Object.values(groupedDemands).sort((a, b) => {
+                if (a.truckNo !== b.truckNo) {
+                    return a.truckNo - b.truckNo;
+                }
+                return a.demandNo.localeCompare(b.demandNo, undefined, { numeric: true });
+            });
+
+            // 1. 出荷一覧表（要望別まとめ）のテーブル描画 ＆ 最下部に合計行を追加
+            let p1TableHTML = sortedDemands.map(g => `
+                <tr class="hover:bg-slate-50 border-b">
+                    <td class="p-2">${g.dueDate}</td>
+                    <td class="p-2 font-bold">${g.demandNo}</td>
+                    <td class="p-2">${g.type}</td>
+                    <td class="p-2">${g.diameter.toFixed(2)}</td>
+                    <td class="p-2 text-center font-bold text-blue-800">${g.qty} 本</td>
+                    <td class="p-2 font-mono">${g.weight.toLocaleString()} kg</td>
+                    <td class="p-2"><span class="bg-slate-200 px-1 rounded text-xxs font-bold mr-1">🚚トラック ${g.truckNo}</span></td>
+                </tr>
+            `).join('');
+
+            // 合計行の追加
+            if (sortedDemands.length > 0) {
+                p1TableHTML += `
+                    <tr class="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900">
+                        <td class="p-2 text-center" colspan="4">【総合計】</td>
+                        <td class="p-2 text-center text-blue-900 font-black">${grandTotalQty.toLocaleString()} 本</td>
+                        <td class="p-2 font-mono text-red-700 font-black">${grandTotalWeight.toLocaleString()} kg</td>
+                        <td class="p-2"></td>
+                    </tr>
+                `;
+            }
+
+            document.getElementById('pattern1-table-body').innerHTML = p1TableHTML;
+
+            // トラック別サマリー表示
+            document.getElementById('pattern1-truck-summary').innerHTML = truckTotals.map((t, i) => `
+                <div class="p-2 bg-white rounded border border-gray-200 shadow-sm">
+                    <div class="flex justify-between font-bold text-slate-800 mb-1"><span>🚚トラック ${i+1}車目 ${i===0 ? '(合積み含)' : ''}</span><span>${t.weight.toLocaleString()} / 12,000 kg</span></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden"><div class="bg-blue-600 h-2 rounded-full" style="width: ${Math.min(100, (t.weight/12000)*100)}%"></div></div>
+                    <div class="text-right text-slate-500 mt-0.5 font-mono">${t.count}本 (${((t.weight/12000)*100).toFixed(1)}%)</div>
+                </div>
+            `).join('');
+
+            // 合積み印刷用テーブル
+            let ainoriPrintHTML = '';
+            let ainoriCount = 0;
+            for(let i=1; i<=3; i++) {
+                let name = document.getElementById(`ainori-name-${i}`)?.value || '';
+                let detail = document.getElementById(`ainori-detail-${i}`)?.value || ''; // ★追加
+                let qty = document.getElementById(`ainori-qty-${i}`)?.value  || '';
+                let w = document.getElementById(`ainori-w-${i}`)?.value  || '';
+                let loc = document.getElementById(`ainori-loc-${i}`)?.value || '';
+
+                // 製品名・詳細・本数・重量・場所のいずれかが入力されている場合のみ行を出力
+                if (name || detail || qty || w || loc) {
+                    ainoriCount++;
+
+// renderShippingPatterns 関数の出力部分
+ainoriPrintHTML += `
+    <tr class="hover:bg-slate-50 border-b">
+        <td class="p-1.5 font-bold text-[12px] break-words">${name || '-'}</td>
+        <td class="p-1.5 font-bold text-[12px] break-words">${detail || '-'}</td>
+        <td class="p-1.5 text-center font-mono text-[12px] whitespace-nowrap">${qty ? qty + ' 本' : '-'}</td>
+        <td class="p-1.5 text-right font-mono text-[12px] whitespace-nowrap">${w ? parseFloat(w).toLocaleString() + ' kg' : '-'}</td>
+        <td class="p-1.5 text-center text-[12px] whitespace-nowrap">${loc || '-'}</td>
+        <td class="p-1.5 text-center font-bold text-gray-500 text-[12px] whitespace-nowrap">１車目</td>
+    </tr>
+`;
+
+                    //ainoriPrintHTML += `
+                    //<tr>
+                    //    <td class="p-2 font-bold">${name || '-'}</td>
+                    //    <td class="p-2 text-slate-600 font-bold">${detail || '-'}</td>
+                    //    <td class="p-2 text-center font-mono">${qty ? qty + ' 本' : '-'}</td>
+                    //    <td class="p-2 text-right font-mono">${w ? parseFloat(w).toLocaleString() + ' kg' : '-'}</td>
+                    //    <td class="p-2 text-center">${loc || '-'}</td>
+                    //    <td class="p-2 text-center font-bold text-gray-500">１車目</td>
+                    //</tr>
+                    //`;
+                }
+                // 1件もデータがない場合は「データなし」の行を1行表示
+                if (ainoriCount === 0) {
+                    ainoriPrintHTML = `
+                    <tr>
+                        <td colspan="6" class="p-2 text-center text-gray-400">合積みデータなし</td>
+                    </tr>
+                    `;
+                }
+            }
+            document.getElementById('pattern1-ainori-print-body').innerHTML = ainoriPrintHTML;
+
+            // 2. 各トラック出荷計画書（配車詳細シート）の描画 ＆ 各シートの最下部に合計行を追加
+            let p2HTML = '';
+            for (let t = 1; t <= truckCount; t++) {
+                let truckAllocs = currentAllocations.map((a, idx) => ({ ...a, originalIdx: idx })).filter(a => a.truckNo === t);
+                
+                // トラックごとの合計計算
+                let tQty = truckAllocs.length;
+                let tWeight = truckAllocs.reduce((sum, a) => sum + a.qrItem.weight, 0);
+
+                p2HTML += `
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 print-page-truck">
+                        <div class="flex justify-between items-center border-b-2 border-slate-900 pb-2 mb-3">
+                            <h2 class="text-lg font-bold text-slate-900">🚚 トラック ${t}車目 配車詳細シート (${currentSelectedDate})</h2>
+                            <span class="text-xs font-bold border px-2 py-0.5 rounded bg-slate-800 text-white">Truck ${t} / ${truckCount}</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse text-xxs">
+                                <thead>
+                                    <tr class="bg-slate-800 text-white font-bold">
+                                        <th class="p-2">No</th><th class="p-2">要望番号</th><th class="p-2">ロットNo</th><th class="p-2">子番</th><th class="p-2">鋼種</th><th class="p-2">線径</th><th class="p-2">重量(kg)</th><th class="p-2 text-center no-print">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    ${truckAllocs.map((a, idx) => `
+                                        <tr class="hover:bg-slate-50">
+                                            <td class="p-2">${idx+1}</td><td class="p-2 font-bold">${a.demandNo}</td><td class="p-2 font-mono">${a.qrItem.lot}</td><td class="p-2">${a.qrItem.subNo}</td>
+                                            <td class="p-2">${a.qrItem.type}</td><td class="p-2">${a.qrItem.diameter.toFixed(2)}</td><td class="p-2 font-mono font-bold">${a.qrItem.weight.toLocaleString()}</td>
+                                            <td class="p-2 text-center no-print"><button onclick="removeAllocation(${a.originalIdx})" class="text-red-500 hover:text-red-700">解除</button></td>
+                                        </tr>
+                                    `).join('')}
+                                    ${truckAllocs.length > 0 ? `
+                                        <tr class="bg-slate-100 font-bold border-t-2 border-slate-400 text-slate-900">
+                                            <td class="p-2 text-center" colspan="4">トラック ${t} 車目 合計</td>
+                                            <td class="p-2 font-bold" colspan="2">計 ${tQty.toLocaleString()} 本</td>
+                                            <td class="p-2 font-mono font-black text-red-700">${tWeight.toLocaleString()} kg</td>
+                                            <td class="p-2 no-print"></td>
+                                        </tr>
+                                    ` : ''}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+            document.getElementById('pattern2-print-zone').innerHTML = p2HTML;
+        }
+
+
+
+
+
+
+
+        //renderShippingPatterns------------------------/
+
+
+
+
+
+
+
+
+   
+async function executeShipping() {
+    if (currentAllocations.length === 0) return alert('出荷確定する配車データがありません。');
+    if (!confirm(`📅 選択日: ${currentSelectedDate}\n配車された原料を正式に出荷確定し、QR在庫および要望残数を更新しますか？`)) return;
+
+    if (!shippingLogs[currentSelectedDate]) shippingLogs[currentSelectedDate] = [];
+
+    currentAllocations.forEach(a => {
+        // 1. 出荷履歴への記録
+        shippingLogs[currentSelectedDate].push({ 
+            truckNo: a.truckNo, 
+            demandNo: a.demandNo, 
+            lot: a.qrItem.lot, 
+            subNo: a.qrItem.subNo, 
+            type: a.qrItem.type, 
+            diameter: a.qrItem.diameter, 
+            weight: a.qrItem.weight 
+        });
+
+        // 2. QR在庫リストからの引き落とし（削除）
+        //qrList = qrList.filter(q => !(q.lot === a.qrItem.lot && q.subNo === a.qrItem.subNo));
+
+        // 3. 要望リスト（demandList）の残数（qty）を1減算
+        let dem = demandList.find(d => d.demandNo === a.demandNo);
+        if (dem && dem.qty > 0) {
+            dem.qty--;
+        }
+    });
+
+    // 配車割り当ての初期化
+    currentAllocations = []; 
+
+    // 各状態を IndexedDB へ保存
+    await Promise.all([
+        saveState('qrList'), 
+        saveState('demandList'), 
+        saveState('shippingLogs'), 
+        saveState('dailyAllocations')
+    ]);
+
+    alert(`${currentSelectedDate} の出荷確定処理が完了しました。（在庫・要望残数を更新しました）`);
+
+    // UI・各テーブルの再描画
+    renderDayTabs(); 
+    updateShippingUIControls(); 
+    renderShippingPatterns(); 
+    renderQR(); 
+    renderDemand();
+}
+
+
+
+
+        function renderHistoryButtons() {
+            const container = document.getElementById('history-date-buttons');
+            const dates = Object.keys(shippingLogs).sort().reverse();
+            if (dates.length === 0) { container.innerHTML = '<p class="text-gray-400 text-xs">過去の出荷確定履歴はありません。</p>'; return; }
+            container.innerHTML = dates.map(d => `
+                <button onclick="viewHistoryDate('${d}')" class="bg-slate-800 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-slate-700">📅 ${d} 出荷分</button>
+            `).join('');
+        }
+
+        function viewHistoryDate(d) {
+            document.getElementById('history-data-view').classList.remove('hidden');
+            document.getElementById('history-selected-date-title').innerText = `📅 ${d} 出荷完了明細`;
+            const logs = shippingLogs[d] || [];
+            document.getElementById('history-p2-body').innerHTML = logs.map(l => `
+                <tr><td class="p-2 font-bold">トラック ${l.truckNo}</td><td class="p-2">${l.demandNo}</td><td class="p-2 font-mono">${l.lot}</td><td class="p-2">${l.subNo}</td><td class="p-2">${l.type}</td><td class="p-2">${l.diameter.toFixed(2)}</td><td class="p-2 font-mono font-bold">${l.weight.toLocaleString()}</td></tr>
+            `).join('');
+        }
+
+        // 8. 初期化処理
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadAllStates();
+            renderDayTabs();
+            renderProduction(); renderQR(); renderTreatment(); renderDemand(); renderOnoeLogs(); renderWashLogs();
+            updateShippingUIControls();
+        });
+
+
+
+
+
+        // =========================================================
+        // 【新機能】OneDrive / ローカル同期フォルダ連携マネージャー
+        // =========================================================
+        class OneDriveFileManager {
+            static HANDLE_KEY = 'onedrive_dir_handle';
+
+            // 1. ユーザーに連携フォルダを選択させ、IndexedDBにハンドルを保存
+            static async setupFolder() {
+                if (!('showDirectoryPicker' in window)) {
+                    alert("お使いのブラウザは File System Access API に非対応です。Chrome または Edge をご使用ください。");
+                    return;
+                }
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    await StorageManager.save(this.HANDLE_KEY, dirHandle);
+                    alert("OneDrive（指定フォルダ）との連携が完了しました。起動時に自動読み込みを行います。");
+                    await this.loadAllFilesFromFolder(dirHandle);
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error("フォルダ連携エラー:", err);
+                        alert("フォルダの連携に失敗しました。");
+                    }
+                }
+            }
+
+            // 2. 保存されているハンドルを取得
+            static async getSavedHandle() {
+                return await StorageManager.load(this.HANDLE_KEY, null);
+            }
+
+            // 3. 連携フォルダ内のファイルをスキャンして自動インポート
+            static async loadAllFilesFromFolder(dirHandle) {
+                try {
+                    // アクセス権限の判定・取得
+                    const options = { mode: 'readwrite' };
+                    if ((await dirHandle.queryPermission(options)) !== 'granted') {
+                        if ((await dirHandle.requestPermission(options)) !== 'granted') {
+                            console.warn("指定フォルダへのアクセス許可が得られませんでした。");
+                            return;
+                        }
+                    }
+
+                    for await (const entry of dirHandle.values()) {
+                        if (entry.kind === 'file') {
+                            const file = await entry.getFile();
+
+                            // (A) システムバックアップ JSON ファイルの検出＆読み込み
+                            if (file.name.endsWith('.json') && file.name.includes('steel_system_backup')) {
+                                const text = await file.text();
+                                try {
+                                    const parsed = JSON.parse(text);
+                                    if (parsed.data) {
+                                        await this.applyBackupData(parsed.data);
+                                        console.log(`[自動読み込み完了] バックアップJSON: ${file.name}`);
+                                    }
+                                } catch (e) {
+                                    console.error(`JSONパース失敗 (${file.name}):`, e);
+                                }
+                            }
+
+                            // (B) 合積み Excel ファイルの検出＆読み込み
+                            if ((file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) && file.name.includes('aidumi')) {
+                                const arrayBuffer = await file.arrayBuffer();
+                                await this.processAinoriExcelBuffer(arrayBuffer);
+                                console.log(`[自動読み込み完了] 合積みExcel: ${file.name}`);
+                            }
+                        }
+                    }
+                    
+                    // UIの再描画
+                    renderDayTabs();
+                    loadAinoriCurrentInputs();
+                    updateShippingUIControls();
+                    renderShippingPatterns();
+                    renderProduction();
+                    renderQR();
+                    renderTreatment();
+                    renderDemand();
+
+                } catch (err) {
+                    console.error("自動ファイル読み込み失敗:", err);
+                }
+            }
+
+            // バックアップJSONデータの反映
+            static async applyBackupData(d) {
+                if (d.productionList) productionList = d.productionList;
+                if (d.qrList) qrList = d.qrList;
+                if (d.treatmentList) treatmentList = d.treatmentList;
+                if (d.demandList) demandList = d.demandList;
+                if (d.dailyAllocations) dailyAllocations = d.dailyAllocations;
+                if (d.dailyAinoriMap) dailyAinoriMap = d.dailyAinoriMap;
+                if (d.shippingLogs) shippingLogs = d.shippingLogs;
+                if (d.onoeOutLog) onoeOutLog = d.onoeOutLog;
+                if (d.onoeReturnLog) onoeReturnLog = d.onoeReturnLog;
+                if (d.washPlanLog) washPlanLog = d.washPlanLog;
+                if (d.washDoneLog) washDoneLog = d.washDoneLog;
+
+                await Promise.all([
+                    saveState('productionList'), saveState('qrList'), saveState('treatmentList'),
+                    saveState('demandList'), saveState('dailyAllocations'), saveState('dailyAinoriMap'),
+                    saveState('shippingLogs'), saveState('onoeOutLog'), saveState('onoeReturnLog'),
+                    saveState('washPlanLog'), saveState('washDoneLog')
+                ]);
+            }
+
+            // 合積みExcelデータの反映処理
+            static async processAinoriExcelBuffer(arrayBuffer) {
+                const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+
+                if (sheetData.length <= 1) return;
+
+                const currentYear = document.getElementById('shipping-year-select')?.value || "2026";
+                const currentMonth = document.getElementById('shipping-month-select')?.value || "07";
+                const importedGrouped = {};
+
+                sheetData.slice(1).forEach(row => {
+                    const rawDate = row[0];
+                    const productName = row[1];
+                    if (!productName || String(productName).trim() === "") return;
+
+                    const dayNum = extractDayNumber(rawDate);
+                    if (dayNum !== null) {
+                        const dayStr = String(dayNum).padStart(2, '0');
+                        const fullDate = `${currentYear}/${currentMonth}/${dayStr}`;
+
+                        if (!importedGrouped[fullDate]) importedGrouped[fullDate] = [];
+
+                        if (importedGrouped[fullDate].length < 3) {
+                            importedGrouped[fullDate].push({
+                                name: row[1] !== undefined ? String(row[1]) : '',
+                                detail: row[2] !== undefined ? String(row[2]) : '', // ★3列目を詳細として読み込み
+                                qty:  row[3] !== undefined ? String(row[3]) : '',
+                                w:    row[4] !== undefined ? String(row[4]) : '',
+                                loc:  row[5] !== undefined ? String(row[5]) : ''
+                            });
+                        }
+                    }
+                });
+
+                Object.keys(importedGrouped).forEach(dateKey => {
+                    const items = importedGrouped[dateKey];
+                    dailyAinoriMap[dateKey] = [
+                        { name: items[0]?.name || '', detail: items[0]?.detail || '', qty: items[0]?.qty || '', w: items[0]?.w || '', loc: items[0]?.loc || '' },
+                        { name: items[1]?.name || '', detail: items[1]?.detail || '', qty: items[1]?.qty || '', w: items[1]?.w || '', loc: items[1]?.loc || '' },
+                        { name: items[2]?.name || '', detail: items[2]?.detail || '', qty: items[2]?.qty || '', w: items[2]?.w || '', loc: items[2]?.loc || '' }
+                    ];
+                });
+
+                await saveState('dailyAinoriMap');
+            }
+        }
+
+
+
+
+        // 8. 初期化処理（OneDrive連携フォルダの自動スキャンを追加）
+        window.addEventListener('DOMContentLoaded', async () => {
+            // IndexedDBの既存状態を復元
+            await loadAllStates();
+
+            // 保存済みの OneDrive/ローカル フォルダがあれば自動一括インポート
+            const savedDirHandle = await OneDriveFileManager.getSavedHandle();
+            if (savedDirHandle) {
+                await OneDriveFileManager.loadAllFilesFromFolder(savedDirHandle);
+            }
+
+            // 初開時の描画更新
+            renderDayTabs();
+            renderProduction(); 
+            renderQR(); 
+            renderTreatment(); 
+            renderDemand(); 
+            renderOnoeLogs(); 
+            renderWashLogs();
+            updateShippingUIControls();
+        });
+
+
+
+
+        
+
+// 1. グローバル変数とSTATE_KEYSに nishoShippingLog を追加
+let nishoShippingLog = [];
+
+// STATE_KEYSに追加
+STATE_KEYS.nishoShippingLog = 'nishoShippingLog';
+
+// saveState スイッチ分岐に追加
+// case 'nishoShippingLog': dataToSave = nishoShippingLog; break;
+
+// loadAllStates に追加
+// nishoShippingLog = await StorageManager.load(STATE_KEYS.nishoShippingLog, []);
+
+// 2. 二色出荷 Excel インポート & 在庫・実績削除処理
+async function importNishoShipping() {
+    const fileInput = document.getElementById('nisho-file-input');
+    const dateVal = convertInputDateToSlash(document.getElementById('nisho-date').value) || currentSelectedDate;
+    const defaultTruck = parseInt(document.getElementById('nisho-truck-select').value) || 1;
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+        return alert('Excelファイルを選択してください。');
+    }
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
+
+            let processedCount = 0;
+            let removedQRCount = 0;
+            let removedProdCount = 0;
+
+            sheetData.forEach((row, idx) => {
+                // 1行目がヘッダーの場合はスキップ
+                if (idx === 0 && isNaN(Number(row[1]))) return;
+
+                let lot = String(row[0]).trim();
+                let subNo = parseInt(row[1]);
+                // Excel3列目に車数指定があればそれを優先、なければ画面の選択値を使用（1〜5車目）
+                let truckNo = parseInt(row[2]) || defaultTruck;
+                if (truckNo < 1 || truckNo > 5) truckNo = 1;
+
+                if (!lot || isNaN(subNo)) return;
+
+                // 生産実績から対象データを参照（情報取得用）
+                let prodMatch = productionList.find(p => p.lot === lot && p.subNo === subNo);
+
+                // 履歴オブジェクト作成
+                let historyItem = {
+                    date: dateVal,
+                    truckNo: truckNo,
+                    lot: lot,
+                    subNo: subNo,
+                    type: prodMatch ? prodMatch.type : '不明',
+                    diameter: prodMatch ? prodMatch.diameter : 0,
+                    weight: prodMatch ? prodMatch.weight : 0
+                };
+                nishoShippingLog.push(historyItem);
+
+                // ① QR在庫から削除
+                const initialQRQty = qrList.length;
+                qrList = qrList.filter(q => !(q.lot === lot && q.subNo === subNo));
+                if (qrList.length < initialQRQty) removedQRCount++;
+
+                // ② 生産実績から削除
+                const initialProdQty = productionList.length;
+                productionList = productionList.filter(p => !(p.lot === lot && p.subNo === subNo));
+                if (productionList.length < initialProdQty) removedProdCount++;
+
+                processedCount++;
+            });
+
+            // 状態の保存
+            await Promise.all([
+                saveState('qrList'),
+                saveState('productionList'),
+                saveState('nishoShippingLog')
+            ]);
+
+            alert(`【二色出荷完了】\n対象: ${processedCount} 件\n・QR在庫削除: ${removedQRCount} 件\n・生産実績削除: ${removedProdCount} 件\n出荷履歴に登録しました。`);
+
+            // 各テーブル・UIの再描画
+            renderNishoHistory();
+            renderQR();
+            renderProduction();
+            renderTreatment();
+            fileInput.value = "";
+
+        } catch (err) {
+            console.error("二色出荷インポートエラー:", err);
+            alert("ファイルの処理中にエラーが発生しました。");
+        }
+    };
+    reader.readAsArrayBuffer(fileInput.files[0]);
+}
+
+// 3. 履歴描画関数
+function renderNishoHistory() {
+    const tbody = document.getElementById('nisho-history-table-body');
+    if (!tbody) return;
+
+    // 最新順にソート
+    const sorted = [...nishoShippingLog].reverse();
+
+    tbody.innerHTML = sorted.map(item => `
+        <tr class="hover:bg-slate-50 text-slate-700 border-b">
+            <td class="p-2">${item.date}</td>
+            <td class="p-2 font-bold text-indigo-700">${item.truckNo} 車目</td>
+            <td class="p-2 font-mono font-bold">${item.lot}</td>
+            <td class="p-2">${item.subNo}</td>
+            <td class="p-2 font-bold">${item.type}</td>
+            <td class="p-2">${item.diameter ? item.diameter.toFixed(2) : '-'}</td>
+            <td class="p-2 font-mono">${item.weight ? item.weight.toLocaleString() : 0} kg</td>
+        </tr>
+    `).join('');
+}
+
+
+
+
+
+
+
+
+async function importActualShippingExcel() {
+    const fileInput = document.getElementById('actual-shipping-file');
+    if (!fileInput.files || fileInput.files.length === 0) return alert('荷揃え実績Excelファイルを選択してください。');
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: "" });
+
+            let actualItems = [];
+            sheetData.forEach((row, idx) => {
+                // ヘッダー行スキップ処理（1列目が数値でない場合）
+                if (idx === 0 && isNaN(Number(row[1]))) return;
+                
+                let lot = String(row[0]).trim();
+                let subNo = parseInt(row[1]);
+                if (lot && !isNaN(subNo)) {
+                    actualItems.push({ lot, subNo });
+                }
+            });
+
+            if (actualItems.length === 0) return alert('有効な荷揃えデータが見つかりませんでした。');
+
+            if (!confirm(`実荷揃えデータ ${actualItems.length} 件を読み込みました。\nQR在庫から対象の在庫を一括引き落としますか？`)) return;
+
+            let successCount = 0;
+            let missingInQR = 0;
+
+            // 実績リストに基づいてQR在庫から削除
+            actualItems.forEach(item => {
+                const initialLen = qrList.length;
+                qrList = qrList.filter(q => !(q.lot === item.lot && q.subNo === item.subNo));
+                
+                if (qrList.length < initialLen) {
+                    successCount++;
+                } else {
+                    missingInQR++; // すでに消えている、または存在しないロット
+                }
+            });
+
+            // 履歴（shippingLogs）の更新
+            if (!shippingLogs[currentSelectedDate]) shippingLogs[currentSelectedDate] = [];
+            actualItems.forEach(item => {
+                // 生産実績などから情報を引き渡して履歴化
+                let prod = productionList.find(p => p.lot === item.lot && p.subNo === item.subNo);
+                shippingLogs[currentSelectedDate].push({
+                    truckNo: 1, // 実績として記録
+                    demandNo: "荷揃え実績引落",
+                    lot: item.lot,
+                    subNo: item.subNo,
+                    type: prod ? prod.type : '不明',
+                    diameter: prod ? prod.diameter : 0,
+                    weight: prod ? prod.weight : 0
+                });
+            });
+
+            // 配車中の割り当て（currentAllocations）もクリア
+            currentAllocations = [];
+
+            // 保存処理
+            await Promise.all([
+                saveState('qrList'),
+                saveState('shippingLogs'),
+                saveState('dailyAllocations')
+            ]);
+
+            let resultMsg = `【出荷確定完了】\n・引き落とし成功: ${successCount} 本`;
+            if (missingInQR > 0) {
+                resultMsg += `\n⚠️ 既に在庫になかった本数: ${missingInQR} 本（要確認）`;
+            }
+            alert(resultMsg);
+
+            // UI再描画
+            renderQR();
+            renderDemand();
+            renderDayTabs();
+            updateShippingUIControls();
+            renderShippingPatterns();
+            fileInput.value = "";
+
+        } catch (err) {
+            console.error("荷揃え実績のインポートエラー:", err);
+            alert("ファイルの処理中にエラーが発生しました。");
+        }
+    };
+    reader.readAsArrayBuffer(fileInput.files[0]);
+}
+
+
+
+
+
+function openAvailableQRWindow() {
+    // 1. 他の日付で配車済みのQRキーを抽出
+    const otherDaysAllocatedQRKeys = new Set();
+    Object.keys(dailyAllocations).forEach(dKey => {
+        (dailyAllocations[dKey] || []).forEach(a => {
+            otherDaysAllocatedQRKeys.add(`${a.qrItem.lot}_${a.qrItem.subNo}`);
+        });
+    });
+
+    // 2. 当日割り当て済みおよび他日割り当て済みを除外
+    const availQRs = getLinkedQRList().filter(qr => {
+        const key = `${qr.lot}_${qr.subNo}`;
+        const isAllocatedInCurrentDay = currentAllocations.some(
+            a => a.qrItem.lot === qr.lot && a.qrItem.subNo === qr.subNo
+        );
+        return !isAllocatedInCurrentDay && !otherDaysAllocatedQRKeys.has(key);
+    });
+
+    // 3. 鋼種(type)昇順 -> 線径(diameter)昇順 -> ロットNo昇順 でソート
+    availQRs.sort((a, b) => {
+        const typeCompare = (a.type || '').localeCompare(b.type || '', undefined, { numeric: true });
+        if (typeCompare !== 0) return typeCompare;
+        
+        if (a.diameter !== b.diameter) {
+            return a.diameter - b.diameter;
+        }
+        
+        return (a.lot || '').localeCompare(b.lot || '', undefined, { numeric: true });
+    });
+
+    // 4. マトリックスサマリー（鋼種/線径別）の集計
+    const summaryMap = {};
+    let totalQty = 0;
+    let totalWeight = 0;
+
+    availQRs.forEach(qr => {
+        const key = `${qr.type || '不明'} / 径:${qr.diameter ? qr.diameter.toFixed(2) : '-'}`;
+        if (!summaryMap[key]) {
+            summaryMap[key] = { qty: 0, weight: 0 };
+        }
+        summaryMap[key].qty++;
+        summaryMap[key].weight += qr.weight || 0;
+        totalQty++;
+        totalWeight += qr.weight || 0;
+    });
+
+    // 5. 別ウィンドウのHTML生成
+    // タスクバー等を除いた画面の表示可能高さを取得（画面いっぱいに合わせる場合）
+const screenHeight = window.screen.availHeight;
+
+const subWindow = window.open(
+    '', 
+    'AvailableQRWindow', 
+    `width=400,height=${screenHeight},top=0,left=0,scrollbars=yes,resizable=yes`
+);
+
+
+    if (!subWindow) {
+        return alert('ポップアップがブロックされました。ブラウザの設定で許可してください。');
+    }
+
+  
+    // 縦並び用のサマリーHTML生成
+    const summaryHTML = Object.keys(summaryMap).map(k => `
+        <div class="summary-item">
+            <span style="color:#FFF; font-weight:bold; font-size:20px;">${k}</span>
+            <div>
+                <strong style="color:#FFF; font-size:20px;">${summaryMap[k].qty}</strong> <strong style="color:#FFF; font-size:20px;">本</strong> 
+                <span style="font-family:monospace; font-size:20px; color:#FFF;">${summaryMap[k].weight.toLocaleString()}</span> <strong style="color:#FFF; font-size:20px;">Kg</strong> 
+            </div>
+        </div>
+    `).join('');
+
+ 
+
+    const tableRowsHTML = availQRs.length > 0 ? availQRs.map((qr, idx) => `
+        <tr style="border-bottom:1px solid #e2e8f0;">
+            <td style="padding:6px; text-align:center; color:#64748b;">${idx + 1}</td>
+            <td class="font-type" style="padding:6px;">${qr.type}</td>
+            <td class="font-dia" style="padding:6px; text-align:right;">${qr.diameter ? qr.diameter.toFixed(2) : '-'}</td>
+            <td style="padding:6px; font-family:monospace; font-weight:bold;">${qr.lot}</td>
+            <td style="padding:6px; text-align:center;">${qr.subNo}</td>
+            <td style="padding:6px; text-align:right; font-family:monospace;">${(qr.weight || 0).toLocaleString()}</td>
+            <td style="padding:6px; text-align:center; color:#475569;">${qr.date || '-'}</td>
+        </tr>
+    `).join('') : `...`;
+    
+
+    
+
+
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="ja">
+        <head>
+            <meta charset="UTF-8">
+            <title>配車参考：現在のQR引当可能在庫一覧（未配車のみ）</title>
+            <style>
+                body { font-family: sans-serif; margin: 16px; background-color: #f8fafc; color: #0f172a; }
+                h2 { font-size: 18px; margin-bottom: 12px; border-bottom: 2px solid #0f172a; padding-bottom: 6px; }
+                
+                /* ★ 縦1列（縦並び）に変更 */
+                .summary-list { 
+                    display: flex; 
+                    flex-direction: column; 
+                    gap: 8px; 
+                    margin-bottom: 16px; 
+                    max-width: 400px;
+                }
+
+                .summary-item {
+                    background: #44007C	; 
+                    color: #cbd5e1; 
+                    padding: 10px 16px; 
+                    border-radius: 6px; 
+                    border: 1px solid #334155; 
+                    font-size: 14px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    max-width:400px;
+                }
+                
+                /* 合計バー */
+                .total-bar { background: #0f172a; color: #fff; padding: 12px 16px; border-radius: 6px; font-weight: bold; font-size: 16px; margin-bottom: 16px; display: flex; justify-content: space-between; }
+                
+                table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                th { background: #1e293b; color: #fff; padding: 8px; text-align: left; font-size: 12px; }
+                tr:nth-child(even) { background-color: #f1f5f9; }
+                .no-print { margin-bottom: 12px; }
+                button { background: #0f172a; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+                button:hover { background: #334155; }
+                
+                .font-type { font-size: 16px; font-weight: bold; color: #1e40af; }
+                .font-dia { font-size: 16px; font-weight: bold; color: #0f172a; }
+                th.th-type-dia { font-size: 14px; }
+            </style>
+        </head>
+        <body>
+            <div class="no-print" style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>📦 配車参考：現在のQR引当可能在庫一覧（配車未割当のみ）</h2>
+                <button onclick="window.print()">🖨️ 印刷 / PDF出力</button>
+            </div>
+
+            <!-- ★ サマリーエリア：縦一列レイアウト -->
+            <div class="summary-list">
+                ${summaryHTML}
+            </div>
+
+            <!-- 合計バー -->
+            <div class="total-bar">
+                <span>【引当可能 合計】</span>
+                <span>${totalQty.toLocaleString()} 本 / ${totalWeight.toLocaleString()} kg</span>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:40px; text-align:center;">No</th>
+                        <th class="th-type-dia">鋼種</th>
+                        <th class="th-type-dia" style="text-align:right;">線径</th>
+                        <th>ロットNo</th>
+                        <th style="text-align:center;">子番</th>
+                        <th style="text-align:right;">重量 (kg)</th>
+                        <th style="text-align:center;">製造日</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRowsHTML}
+                </tbody>
+            </table>
+        </body>
+        </html>
+    `;
+
+    subWindow.document.open();
+    subWindow.document.write(htmlContent);
+    subWindow.document.close();
+}
+
+
+
+// 引当可能QR在庫パネルの表示・非表示切り替え
+function toggleQrStockPanel() {
+    const panel = document.getElementById('shipping-qr-aside');
+    const icon = document.getElementById('toggle-qr-icon');
+    const text = document.getElementById('toggle-qr-btn-text');
+    
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        icon.textContent = '';
+        text.textContent = 'QR在庫を非表示';
+    } else {
+        panel.classList.add('hidden');
+        icon.textContent = '';
+        text.textContent = 'QR在庫を表示';
+    }
+}
+
+
+async function clearAllAinoriDataAcrossAllDates() {
+    if (!confirm("⚠️ すべての月・日付に登録されている合積みデータを完全に消去しますか？")) return;
+
+    // dailyAinoriMap の中のデータをすべて空にする（またはオブジェクト自体をリセット）
+    dailyAinoriMap = {};
+
+    // IndexedDB上の保存状態を更新
+    await saveState('dailyAinoriMap');
+
+    // 現在表示されている入力欄（1〜3行目）をクリア
+    for(let i = 1; i <= 3; i++) {
+        document.getElementById(`ainori-name-${i}`).value = '';
+        document.getElementById(`ainori-detail-${i}`).value = '';
+        document.getElementById(`ainori-qty-${i}`).value = '';
+        document.getElementById(`ainori-w-${i}`).value = '';
+        document.getElementById(`ainori-loc-${i}`).value = '';
+    }
+
+    // 画面の再描画
+    renderShippingPatterns();
+    renderDayTabs(); // 日付タブのバッジ（合積み有無のドット等）を更新するため
+
+    alert("すべての月・日付の合積みデータをクリアしました。");
+}
+
+
+window.addEventListener('DOMContentLoaded', () => {
+const now = new Date();
+const year = now.getFullYear(); // 例: 2026
+const month = String(now.getMonth() + 1).padStart(2, '0'); // 01～12
+document.getElementById('shipping-year-select').value = year;
+document.getElementById('shipping-month-select').value = month;
+// 必要なら初期表示時にも実行
+onShippingYearMonthChange();
+});
+
+
+
+
+
+    </script>
+</body>
+</html>
