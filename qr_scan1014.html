@@ -791,7 +791,7 @@
 
 
 
-    async function  exportToExcel(){
+    function exportToExcel() {
     const worksheetData = [headers, ...rows];
 
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
