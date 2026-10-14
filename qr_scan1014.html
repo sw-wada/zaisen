@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRスキャン管理システム</title>
+    <!-- Excel出力用のライブラリ (SheetJS) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- カメラでQRコードを解析するためのライブラリ (jsQR) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #16a34a;
+            --danger-color: #dc2626;
+            --warning-color: #d97706;
+            --pairdrop-color: #6366f1;
+            --bg-color: #f8fafc;
+            --card-color: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #cbd5e1;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* 画面を引き下げて更新（Pull-to-Refresh）する挙動を無効化 */
+        html, body {
+            overscroll-behavior-y: none;
+            touch-action: pan-x pan-y;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 16px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* 画面切り替えの制御 */
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+
+        /* メインメニュー画面 */
+        .menu-title {
+            text-align: center;
+            font-size: 1.8rem;
+            color: var(--primary-color);
+            margin-bottom: 24px;
+        }
+        .menu-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .menu-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 18px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.1s, background-color 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .menu-btn:active {
+            transform: scale(0.98);
+        }
+        .menu-btn:hover {
+            background-color: #1d4ed8;
+        }
+        .badge {
+            background-color: rgba(255, 255, 255, 0.25);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+        }
+
+        .all-clear-btn {
+            margin-top: 16px;
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: background-color 0.2s;
+        }
+        .all-clear-btn:hover {
+            background-color: #b91c1c;
+        }
+
+        /* スキャン画面の共通スタイル */
+        header {
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .back-btn {
+            background-color: #64748b;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-weight: bold;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            color: var(--primary-color);
+        }
+
+        .count-badge {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 1rem;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        .header-buttons {
+            display: flex;
+            flex-direction: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .pairdrop-btn {
+            background-color: var(--pairdrop-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .export-btn {
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .camera-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .clear-btn {
+            background-color: var(--warning-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .scan-area {
+            background: var(--card-color);
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .qr-input {
+            width: 100%;
+            padding: 12px;
+            font-size: 1.1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            outline: none;
+        }
+
+        .qr-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .message {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: var(--danger-color);
+            min-height: 20px;
+        }
+
+        .list-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 60px;
+        }
+
+        .data-card {
+            background: var(--card-color);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+            position: relative;
+            border-left: 5px solid var(--primary-color);
+        }
+
+        .data-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .info-block span, .note-input-group span {
+            display: block;
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .info-block strong {
+            font-size: 1.1rem;
+            word-break: break-all;
+        }
+
+        .notes-block {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .dropdown-select, .custom-note-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 0.95rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: #fff;
+            outline: none;
+        }
+        .dropdown-select:focus, .custom-note-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .delete-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            align-self: end;
+        }
+
+        /* カメラスキャン用モーダル */
+        .camera-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .camera-modal.active {
+            display: flex;
+        }
+        .camera-video-wrap {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            aspect-ratio: 3/4;
+            overflow: hidden;
+            border-radius: 12px;
+            background: #000;
+        }
+        #cameraVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .scan-frame {
+            position: absolute;
+            top: 20%;
+            left: 10%;
+            width: 80%;
+            height: 60%;
+            border: 3px solid var(--success-color);
+            border-radius: 12px;
+            box-shadow: 0 0 0 2000px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+        .camera-status {
+            color: white;
+            margin-top: 16px;
+            font-size: 0.95rem;
+            text-align: center;
+            min-height: 24px;
+            padding: 0 20px;
+        }
+        
+        .camera-controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            width: 100%;
+            max-width: 340px;
+            justify-content: center;
+        }
+        
+        .camera-control-btn {
+            flex: 1;
+            background-color: #475569;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            text-align: center;
+        }
+        .camera-control-btn.active {
+            background-color: #f59e0b;
+            color: #000;
+        }
+        .camera-close-btn {
+            flex: 1;
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        @media (min-width: 768px) {
+            header {
+                flex-direction: row;
+                justify-content: space-between;
+            }
+            .header-top {
+                width: auto;
+            }
+            .header-buttons {
+                width: auto;
+            }
+            .data-card {
+                grid-template-columns: 2fr 3fr auto;
+                align-items: center;
+                gap: 20px;
+            }
+            .notes-block {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            }
+            .delete-btn {
+                width: auto;
+                margin-top: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- メインメニュー画面 -->
+    <div id="menuScreen" class="screen active">
+        <h1 class="menu-title">QRコード スキャン管理</h1>
+        <div class="menu-grid">
+            <button class="menu-btn" onclick="switchScreen('nishiki')">
+                <span>QRスキャン二色出荷用</span>
+                <span class="badge" id="menuBadgeNishiki">0件</span>
+            </button>
+            <button class="menu-btn" onclick="switchScreen('onoeout')">
+                <span>QRスキャン尾上払出用</span>
+                <span class="badge" id="menuBadgeOnoeout">0件</span>
+            </button>
+            <button class="menu-btn" onclick="switchScreen('onoereturn')">
+                <span>QRスキャン尾上払戻用</span>
+                <span class="badge" id="menuBadgeOnoereturn">0件</span>
+            </button>
+
+            <button class="all-clear-btn" onclick="clearAllData()">全データクリア</button>
+        </div>
+    </div>
+
+    <!-- 共通スキャン画面テンプレート -->
+    <div id="scanScreen" class="screen">
+        <header>
+            <div class="header-top">
+                <button class="back-btn" onclick="switchScreen('menu')">← 戻る</button>
+                <h1>
+                    <span id="screenTitle">QRスキャン</span>
+                    <span id="scanCountBadge" class="count-badge">0 件</span>
+                </h1>
+            </div>
+            <div class="header-buttons">
+                <a href="https://pairdrop.net" target="_blank" rel="noopener noreferrer" class="pairdrop-btn">🌐 PairDrop</a>
+                <button class="camera-btn" onclick="openCameraModal()">📷 カメラ</button>
+                <button class="export-btn" onclick="exportToExcel()">Excel出力</button>
+                <button class="clear-btn" onclick="clearCurrentData()">🗑️ クリア</button>
+            </div>
+        </header>
+
+        <div class="scan-area">
+            <div class="input-group">
+                <label for="qrInput">外付けスキャナー：ここにフォーカスを当ててスキャンしてください</label>
+                <input type="text" id="qrInput" class="qr-input" placeholder="スキャン待ち..." autofocus autocomplete="off" inputmode="none">
+            </div>
+            <div id="msg" class="message"></div>
+        </div>
+
+        <div id="listContainer" class="list-container"></div>
+    </div>
+
+</div>
+
+<!-- カメラ用モーダル -->
+<div id="cameraModal" class="camera-modal">
+    <div class="camera-video-wrap">
+        <video id="cameraVideo" playsinline muted></video>
+        <div class="scan-frame"></div>
+    </div>
+    <div id="cameraStatus" class="camera-status">カメラを起動しています...</div>
+    <div class="camera-controls">
+        <button id="torchBtn" class="camera-control-btn" onclick="toggleTorch()">🔦 ライト点灯</button>
+        <button class="camera-close-btn" onclick="closeCameraModal()">閉じる</button>
+    </div>
+</div>
+
+<script>
+    const BIKO1_OPTIONS = ["", "荷姿不良", "保留", "錆", "黒線", "要再検査", "その他"];
+
+    // 状態管理用オブジェクト
+    const modes = {
+        nishiki: { title: "二色出荷用", filePrefix: "QRnishiki_", showWeight: false, data: [], keys: new Set() },
+        onoeout: { title: "尾上払出用", filePrefix: "QRonoeout_", showWeight: false, data: [], keys: new Set() },
+        onoereturn: { title: "尾上払戻用", filePrefix: "QRonoereturn_", showWeight: true, data: [], keys: new Set() }
+    };
+
+    let currentMode = null; // 'nishiki', 'onoeout', 'onoereturn'
+
+    const qrInput = document.getElementById('qrInput');
+    const listContainer = document.getElementById('listContainer');
+    const msg = document.getElementById('msg');
+    const screenTitle = document.getElementById('screenTitle');
+    const scanCountBadge = document.getElementById('scanCountBadge');
+
+    // メニューバッジの更新
+    function updateMenuBadges() {
+        document.getElementById('menuBadgeNishiki').textContent = `${modes.nishiki.data.length}件`;
+        document.getElementById('menuBadgeOnoeout').textContent = `${modes.onoeout.data.length}件`;
+        document.getElementById('menuBadgeOnoereturn').textContent = `${modes.onoereturn.data.length}件`;
+    }
+
+    // 画面切り替え関数
+    function switchScreen(modeKey) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        
+        if (modeKey === 'menu') {
+            currentMode = null;
+            updateMenuBadges();
+            document.getElementById('menuScreen').classList.add('active');
+        } else {
+            currentMode = modeKey;
+            screenTitle.textContent = modes[currentMode].title;
+            document.getElementById('scanScreen').classList.add('active');
+            renderList();
+            msg.textContent = '';
+            qrInput.value = '';
+            qrInput.focus();
+        }
+    }
+
+    // 各画面でのデータクリア
+    function clearCurrentData() {
+        if (!currentMode) return;
+        const modeObj = modes[currentMode];
+        if (modeObj.data.length === 0) {
+            alert('クリアするデータがありません。');
+            return;
+        }
+
+        if (confirm(`「${modeObj.title}」のスキャンデータ（${modeObj.data.length}件）をすべて削除しますか？`)) {
+            modeObj.data = [];
+            modeObj.keys.clear();
+            renderList();
+            qrInput.focus();
+        }
+    }
+
+    // メイン画面での全データクリア
+    function clearAllData() {
+        const totalCount = modes.nishiki.data.length + modes.onoeout.data.length + modes.onoereturn.data.length;
+        if (totalCount === 0) {
+            alert('クリアするデータがありません。');
+            return;
+        }
+
+        if (confirm(`すべての画面のスキャンデータ（合計 ${totalCount}件）を消去しますか？`)) {
+            Object.keys(modes).forEach(key => {
+                modes[key].data = [];
+                modes[key].keys.clear();
+            });
+            updateMenuBadges();
+            alert('すべてのデータをクリアしました。');
+        }
+    }
+
+    // フォーカス維持
+    document.addEventListener('click', (e) => {
+        if (!currentMode) return;
+        if (!['INPUT', 'SELECT', 'LABEL', 'BUTTON', 'OPTION', 'A'].includes(e.target.tagName)) {
+            qrInput.focus();
+        }
+    });
+
+    let bufferTimer = null;
+
+    qrInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(bufferTimer);
+            const textToProcess = qrInput.value.trim();
+            qrInput.value = '';
+            if (textToProcess) processQRCode(textToProcess);
+        }
+    });
+
+    qrInput.addEventListener('input', function(e) {
+        clearTimeout(bufferTimer);
+        if (/[\r\n]/.test(this.value)) {
+            const rawValue = this.value.replace(/[\r\n]/g, '').trim();
+            this.value = '';
+            if (rawValue) processQRCode(rawValue);
+            return;
+        }
+        bufferTimer = setTimeout(() => {
+            const rawValue = qrInput.value.trim();
+            if (rawValue) {
+                qrInput.value = '';
+                processQRCode(rawValue);
+            }
+        }, 80); 
+    });
+
+    function processQRCode(text) {
+        if (!currentMode) return false;
+        msg.textContent = ''; 
+
+        let normalizedText = text.replace(/ /g, ' ').replace(/\s+/g, '  ');
+        const parts = normalizedText.split('  ');
+        
+        if (parts.length !== 2) {
+            msg.textContent = `フォーマットエラー: [${text}] - 形式が正しくありません。(ロットNoと子番の間にスペースが必要です)`;
+            return false;
+        }
+
+        const lotNo = parts[0].trim();
+        const rawSubNo = parts[1].trim();
+        
+        const parsedSubNo = parseInt(rawSubNo, 10);
+        if (isNaN(parsedSubNo)) {
+            msg.textContent = `子番エラー: [${rawSubNo}] を数値に変換できませんでした。`;
+            return false;
+        }
+        const subNo = String(parsedSubNo); 
+        const uniqueKey = `${lotNo}-${subNo}`;
+
+        const modeObj = modes[currentMode];
+
+        if (modeObj.keys.has(uniqueKey)) {
+            msg.textContent = `重複エラー: ロット [${lotNo}] 子番 [${subNo}] は既にスキャン済みです。`;
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            return false;
+        }
+
+        const today = new Date();
+        const dateStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+
+        const newData = {
+            id: uniqueKey,
+            lotNo: lotNo,
+            subNo: subNo,
+            weight: "",
+            biko1: "",
+            biko2: "",
+            date: dateStr
+        };
+        
+        modeObj.keys.add(uniqueKey);
+        modeObj.data.push(newData);
+
+        renderList();
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        return true;
+    }
+
+    // リスト描画処理および件数更新
+    function renderList() {
+        listContainer.innerHTML = '';
+        if (!currentMode) return;
+
+        const modeObj = modes[currentMode];
+        scanCountBadge.textContent = `${modeObj.data.length} 件`;
+
+        modeObj.data.forEach(data => {
+            const card = document.createElement('div');
+            card.className = 'data-card';
+            card.id = `card-${data.id}`;
+
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'data-info';
+            infoDiv.innerHTML = `
+                <div class="info-block"><span>ロットNo</span><strong>${data.lotNo}</strong></div>
+                <div class="info-block"><span>子番</span><strong>${data.subNo}</strong></div>
+            `;
+
+            const notesDiv = document.createElement('div');
+            notesDiv.className = 'notes-block';
+
+            if (modeObj.showWeight) {
+                const weightGroup = document.createElement('div');
+                weightGroup.className = 'note-input-group';
+                weightGroup.innerHTML = `<span>重量 (kg)</span>`;
+                const weightInput = document.createElement('input');
+                weightInput.type = 'number';
+                weightInput.step = 'any';
+                weightInput.className = 'custom-note-input';
+                weightInput.placeholder = '重量を入力...';
+                weightInput.value = data.weight;
+                weightInput.oninput = function() {
+                    data.weight = this.value;
+                };
+                weightGroup.appendChild(weightInput);
+                notesDiv.appendChild(weightGroup);
+            }
+            
+            // 備考1 (選択)
+            const biko1Group = document.createElement('div');
+            biko1Group.className = 'note-input-group';
+            biko1Group.innerHTML = `<span>備考１ (選択)</span>`;
+            const select = document.createElement('select');
+            select.className = 'dropdown-select';
+            BIKO1_OPTIONS.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt;
+                option.textContent = opt || "--- 選択してください ---";
+                if (opt === data.biko1) option.selected = true;
+                select.appendChild(option);
+            });
+            select.onchange = function() {
+                data.biko1 = this.value; 
+            };
+            biko1Group.appendChild(select);
+
+            // 備考2 (手入力)
+            const biko2Group = document.createElement('div');
+            biko2Group.className = 'note-input-group';
+            biko2Group.innerHTML = `<span>備考２ (手入力)</span>`;
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            textInput.className = 'custom-note-input';
+            textInput.placeholder = '備考を入力...';
+            textInput.value = data.biko2;
+            textInput.oninput = function() {
+                data.biko2 = this.value; 
+            };
+            biko2Group.appendChild(textInput);
+
+            notesDiv.appendChild(biko1Group);
+            notesDiv.appendChild(biko2Group);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '削除';
+            deleteBtn.onclick = function() {
+                if (confirm(`ロット: ${data.lotNo} 子番: ${data.subNo} を削除しますか？`)) {
+                    modeObj.keys.delete(data.id);
+                    modeObj.data = modeObj.data.filter(item => item.id !== data.id);
+                    renderList();
+                    qrInput.focus();
+                }
+            };
+
+            card.appendChild(infoDiv);
+            card.appendChild(notesDiv);
+            card.appendChild(deleteBtn);
+            
+            listContainer.appendChild(card);
+        });
+    }
+
+
+
+
+
+    async function  exportToExcel(){
+    const worksheetData = [headers, ...rows];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        "スキャンデータ"
+    );
+
+    const excelBuffer = XLSX.write(workbook, {
+        bookType: "xlsx",
+        type: "array"
+    });
+
+    const accessToken = await getAccessToken();
+
+    const fileName = "スキャンデータ.xlsx";
+
+    await fetch(
+        `https://graph.microsoft.com/v1.0/me/drive/root:/QRScan/${fileName}:/content`,
+        {
+            method: "PUT",
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type":
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            },
+            body: excelBuffer
+        }
+    );
+
+    alert("OneDriveへ保存完了");
+}
+
+
+
+    /* ===================== カメラ制御 & ライト制御 ===================== */
+    const cameraModal = document.getElementById('cameraModal');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const cameraStatus = document.getElementById('cameraStatus');
+    const torchBtn = document.getElementById('torchBtn');
+
+    let cameraStream = null;
+    let scanLoopId = null;
+    let lastScannedText = null;
+    let lastScannedTime = 0;
+    let isTorchOn = false;
+    const scanCanvas = document.createElement('canvas');
+    const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+    async function openCameraModal() {
+        cameraModal.classList.add('active');
+        cameraStatus.textContent = 'カメラを起動しています...';
+        resetTorchUI();
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            cameraStatus.textContent = 'カメラを利用できません。HTTPS接続であることを確認してください。';
+            return;
+        }
+
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { 
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 30 }
+                }
+            });
+            cameraVideo.srcObject = cameraStream;
+            cameraVideo.setAttribute('playsinline', 'true');
+            cameraVideo.setAttribute('muted', 'true');
+            
+            await cameraVideo.play();
+            cameraStatus.textContent = 'QRコードを黄緑の枠内に収めてください';
+            scanLoop();
+        } catch (err) {
+            cameraStatus.textContent = 'カメラを起動できませんでした: ' + err.message;
+        }
+    }
+
+    function closeCameraModal() {
+        turnOffTorchSilently();
+        cameraModal.classList.remove('active');
+        if (scanLoopId) {
+            cancelAnimationFrame(scanLoopId);
+            scanLoopId = null;
+        }
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        qrInput.focus();
+    }
+
+    async function toggleTorch() {
+        if (!cameraStream) return;
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        if (!videoTrack) return;
+
+        try {
+            const capabilities = typeof videoTrack.getCapabilities === 'function' ? videoTrack.getCapabilities() : {};
+            if (capabilities.torch) {
+                isTorchOn = !isTorchOn;
+                await videoTrack.applyConstraints({
+                    advanced: [{ torch: isTorchOn }]
+                });
+                
+                if (isTorchOn) {
+                    torchBtn.textContent = '🔌 ライト消灯';
+                    torchBtn.classList.add('active');
+                } else {
+                    resetTorchUI();
+                }
+            } else {
+                alert("【重要】お使いのiPhone(iOS)は、システム制限のためブラウザ上からの物理ライト点灯に対応していません。\n\nお手数ですが、部屋の照明を明るくするか、端末自体の「画面の明るさ」を上げて調整してください。");
+            }
+        } catch (err) {
+            console.error("ライト制御エラー:", err);
+            alert("この端末はブラウザからのライト制御に対応していないか、エラーが発生しました。");
+        }
+    }
+
+    async function turnOffTorchSilently() {
+        if (!cameraStream || !isTorchOn) return;
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        if (!videoTrack) return;
+        try {
+            const capabilities = typeof videoTrack.getCapabilities === 'function' ? videoTrack.getCapabilities() : {};
+            if (capabilities.torch) {
+                await videoTrack.applyConstraints({
+                    advanced: [{ torch: false }]
+                });
+            }
+        } catch(e) {}
+        resetTorchUI();
+    }
+
+    function resetTorchUI() {
+        isTorchOn = false;
+        torchBtn.textContent = '🔦 ライト点灯';
+        torchBtn.classList.remove('active');
+    }
+
+    function scanLoop() {
+        if (!cameraStream) return;
+
+        if (cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
+            const videoWidth = cameraVideo.videoWidth;
+            const videoHeight = cameraVideo.videoHeight;
+            scanCanvas.width = videoWidth;
+            scanCanvas.height = videoHeight;
+            
+            scanCtx.drawImage(cameraVideo, 0, 0, videoWidth, videoHeight);
+            
+            const clipWidth = Math.floor(videoWidth * 0.8);
+            const clipHeight = Math.floor(videoHeight * 0.6);
+            const clipX = Math.floor((videoWidth - clipWidth) / 2);
+            const clipY = Math.floor((videoHeight - clipHeight) / 2);
+
+            const imageData = scanCtx.getImageData(clipX, clipY, clipWidth, clipHeight);
+            
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: 'dontInvert'
+            });
+
+            if (code && code.data) {
+                const now = Date.now();
+                if (code.data !== lastScannedText || (now - lastScannedTime) > 1800) {
+                    lastScannedText = code.data;
+                    lastScannedTime = now;
+                    handleCameraScan(code.data);
+                }
+            }
+        }
+        scanLoopId = requestAnimationFrame(scanLoop);
+    }
+
+    function handleCameraScan(text) {
+        const success = processQRCode(text);
+        if (success) {
+            cameraStatus.textContent = `✅ 読み取り成功: ${text}`;
+            if (navigator.vibrate) navigator.vibrate(80);
+        } else {
+            cameraStatus.textContent = `⚠️ 失敗: ${msg.textContent || '読み取れませんでした'}`;
+        }
+        setTimeout(() => {
+            if (cameraModal.classList.contains('active')) {
+                cameraStatus.textContent = 'QRコードを黄緑の枠内に収めてください';
+            }
+        }, 2000);
+    }
+</script>
+
+</body>
+</html>
