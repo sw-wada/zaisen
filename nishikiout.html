@@ -791,42 +791,56 @@
 
 
 
+// Excel出力処理
+    function exportToExcel() {
+        if (!currentMode) return;
+        const modeObj = modes[currentMode];
 
-    async function exportToExcel() {
-    const worksheetData = [headers, ...rows];
-
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        "スキャンデータ"
-    );
-
-    const excelBuffer = XLSX.write(workbook, {
-        bookType: "xlsx",
-        type: "array"
-    });
-
-    const accessToken = await getAccessToken();
-
-    const fileName = "スキャンデータ.xlsx";
-
-    await fetch(
-        `https://graph.microsoft.com/v1.0/me/drive/root:/QRScan/${fileName}:/content`,
-        {
-            method: "PUT",
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type":
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            },
-            body: excelBuffer
+        if (modeObj.data.length === 0) {
+            alert('出力するデータがありません。QRコードをスキャンしてください。');
+            return;
         }
-    );
 
-    alert("OneDriveへ保存完了");
+        let headers = [];
+        let rows = [];
+
+        if (modeObj.showWeight) {
+            headers = ["ロットNo", "子番", "重量", "備考１", "備考２手入力", "出力した日付"];
+            rows = modeObj.data.map(item => [
+                item.lotNo,
+                item.subNo,
+                item.weight,
+                item.biko1 !== "" ? item.biko1 : item.biko2,
+                item.biko2,
+                item.date
+            ]);
+        } else {
+            headers = ["ロットNo", "子番", "備考１", "備考２手入力", "出力した日付"];
+            rows = modeObj.data.map(item => [
+                item.lotNo,
+                item.subNo,
+                item.biko1 !== "" ? item.biko1 : item.biko2,
+                item.biko2,
+                item.date
+            ]);
+        }
+
+        const worksheetData = [headers, ...rows];
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "スキャンデータ");
+
+        const now = new Date();
+        const timeStamp = now.getFullYear() + 
+                          String(now.getMonth() + 1).padStart(2, '0') + 
+                          String(now.getDate()).padStart(2, '0') + "_" + 
+                          String(now.getHours()).padStart(2, '0') + 
+                          String(now.getMinutes()).padStart(2, '0');
+                          
+        const fileName = `${modeObj.filePrefix}${timeStamp}.xlsx`;
+
+        XLSX.writeFile(workbook, fileName);
 }
 
 
