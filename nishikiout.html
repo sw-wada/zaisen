@@ -463,9 +463,9 @@
     <div id="menuScreen" class="screen active">
         <h1 class="menu-title">二色出荷 スキャン管理</h1>
         <div class="menu-grid">
-            <button class="menu-btn" onclick="switchScreen('nishiki')">
+            <button class="menu-btn" onclick="switchScreen('nishiki1')">
                 <span>二色１車目</span>
-                <span class="badge" id="menuBadgeNishiki">0件</span>
+                <span class="badge" id="menuBadgeNishiki1">0件</span>
             </button>
             <button class="menu-btn" onclick="switchScreen('nishiki2')">
                 <span>二色２車目</span>
@@ -474,6 +474,14 @@
             <button class="menu-btn" onclick="switchScreen('nishiki3')">
                 <span>二色３車目</span>
                 <span class="badge" id="menuBadgeNishiki3">0件</span>
+            </button>
+            <button class="menu-btn" onclick="switchScreen('nishiki4')">
+                <span>二色４車目</span>
+                <span class="badge" id="menuBadgeNishiki4">0件</span>
+            </button>
+            <button class="menu-btn" onclick="switchScreen('nishiki5')">
+                <span>二色５車目</span>
+                <span class="badge" id="menuBadgeNishiki5">0件</span>
             </button>
             
 
@@ -526,13 +534,15 @@
 </div>
 
 <script>
-    const BIKO1_OPTIONS = ["", "荷姿不良", "保留", "錆", "黒線", "要再検査", "その他"];
+    const BIKO1_OPTIONS = ["",];
 
     // 状態管理用オブジェクト
     const modes = {
-        nishiki: { title: "二色１車目", filePrefix: "QRnishiki_", showWeight: false, data: [], keys: new Set() },
+        nishiki1: { title: "二色１車目", filePrefix: "nishiki1_", showWeight: false, data: [], keys: new Set() },
         nishiki2: { title: "二色２車目", filePrefix: "nishiki2_", showWeight: false, data: [], keys: new Set() },
-        nishiki3: { title: "二色３車目", filePrefix: "nishiki3_", showWeight: false, data: [], keys: new Set() }
+        nishiki3: { title: "二色３車目", filePrefix: "nishiki3_", showWeight: false, data: [], keys: new Set() },
+        nishiki4: { title: "二色４車目", filePrefix: "nishiki4_", showWeight: false, data: [], keys: new Set() },
+        nishiki5: { title: "二色５車目", filePrefix: "nishiki5_", showWeight: false, data: [], keys: new Set() }
     };
 
     let currentMode = null; // 'nishiki', 'onoeout', 'onoereturn'
@@ -545,9 +555,11 @@
 
     // メニューバッジの更新
     function updateMenuBadges() {
-        document.getElementById('menuBadgeNishiki').textContent = `${modes.nishiki.data.length}件`;
+        document.getElementById('menuBadgeNishiki1').textContent = `${modes.nishiki1.data.length}件`;
         document.getElementById('menuBadgeNishiki2').textContent = `${modes.nishiki2.data.length}件`;
         document.getElementById('menuBadgeNishiki3').textContent = `${modes.nishiki3.data.length}件`;
+        document.getElementById('menuBadgeNishiki4').textContent = `${modes.nishiki4.data.length}件`;
+        document.getElementById('menuBadgeNishiki5').textContent = `${modes.nishiki5.data.length}件`;
     }
 
     // 画面切り替え関数
@@ -588,7 +600,7 @@
 
     // メイン画面での全データクリア
     function clearAllData() {
-        const totalCount = modes.nishiki.data.length + modes.onoeout.data.length + modes.onoereturn.data.length;
+        const totalCount = modes.nishiki1.data.length + modes.nishiki2.data.length + modes.nishiki3.data.length + modes.nishiki4.data.length + modes.nishiki5.data.length;
         if (totalCount === 0) {
             alert('クリアするデータがありません。');
             return;
