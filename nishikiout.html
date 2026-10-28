@@ -463,9 +463,9 @@
     <div id="menuScreen" class="screen active">
         <h1 class="menu-title">二色出荷 スキャン管理</h1>
         <div class="menu-grid">
-            <button class="menu-btn" onclick="switchScreen('nishiki1')">
+            <button class="menu-btn" onclick="switchScreen('nishiki')">
                 <span>二色１車目</span>
-                <span class="badge" id="menuBadgeNishiki1">0件</span>
+                <span class="badge" id="menuBadgeNishiki">0件</span>
             </button>
             <button class="menu-btn" onclick="switchScreen('nishiki2')">
                 <span>二色２車目</span>
@@ -475,10 +475,7 @@
                 <span>二色３車目</span>
                 <span class="badge" id="menuBadgeNishiki3">0件</span>
             </button>
-            <button class="menu-btn" onclick="switchScreen('nishiki4')">
-                <span>二色４車目</span>
-                <span class="badge" id="menuBadgeNishiki4">0件</span>
-            </button>
+            
 
             <button class="all-clear-btn" onclick="clearAllData()">全データクリア</button>
         </div>
@@ -533,7 +530,7 @@
 
     // 状態管理用オブジェクト
     const modes = {
-        nishiki1: { title: "二色１車目", filePrefix: "nishiki1_", showWeight: false, data: [], keys: new Set() },
+        nishiki: { title: "二色１車目", filePrefix: "nishiki_", showWeight: false, data: [], keys: new Set() },
         nishiki2: { title: "二色２車目", filePrefix: "nishiki2_", showWeight: false, data: [], keys: new Set() },
         nishiki3: { title: "二色３車目", filePrefix: "nishiki3_", showWeight: false, data: [], keys: new Set() }
     };
@@ -548,7 +545,7 @@
 
     // メニューバッジの更新
     function updateMenuBadges() {
-        document.getElementById('menuBadgeNishiki1').textContent = `${modes.nishiki1.data.length}件`;
+        document.getElementById('menuBadgeNishiki').textContent = `${modes.nishiki.data.length}件`;
         document.getElementById('menuBadgeNishiki2').textContent = `${modes.nishiki2.data.length}件`;
         document.getElementById('menuBadgeNishiki3').textContent = `${modes.nishiki3.data.length}件`;
     }
